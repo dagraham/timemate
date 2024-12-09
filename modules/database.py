@@ -2,11 +2,17 @@ import datetime
 import sqlite3
 
 import click
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
 console = Console()
+
+
+def timestamp():
+    return round(datetime.datetime.now().timestamp())
 
 
 def setup_database():
@@ -15,13 +21,16 @@ def setup_database():
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS Accounts (
                         account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        account_name TEXT NOT NULL UNIQUE)"""
+                        account_name TEXT NOT NULL UNIQUE,
+                        pinned INTEGER DEFAULT 0,
+                        datetime INTEGER)"""
     )
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS Times (
                         time_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         account_id INTEGER NOT NULL,
-                        status TEXT CHECK(status IN ('paused', 'running')) DEFAULT 'paused',
+                        description TEXT, 
+                        status TEXT CHECK(status IN ('paused', 'running', 'ended')) DEFAULT 'paused',
                         timedelta INTEGER NOT NULL DEFAULT 0,
                         datetime INTEGER,
                         FOREIGN KEY (account_id) REFERENCES Accounts(account_id))"""
@@ -44,7 +53,8 @@ def add_account(account_name):
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO Accounts (account_name) VALUES (?)", (account_name,)
+            "INSERT INTO Accounts (account_name, pinned, datetime) VALUES (?, ?, ?)",
+            (account_name, 0, timestamp()),
         )
         conn.commit()
         console.print(f"[green]Account '{account_name}' added successfully![/green]")
@@ -56,67 +66,64 @@ def add_account(account_name):
 @click.command()
 def list_accounts():
     """List all accounts."""
+    _list_accounts()
+
+
+def _list_accounts():
     conn = setup_database()
     cursor = conn.cursor()
-    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    cursor.execute("SELECT account_id, pinned, account_name FROM Accounts")
     accounts = cursor.fetchall()
     table = Table(title="Accounts", expand=True)
     table.add_column("row", justify="center", width=3, style="dim")
-    table.add_column("Account Name", style="cyan")
-    for idx, (account_id, account_name) in enumerate(accounts, start=1):
-        table.add_row(str(idx), account_name)
+    table.add_column("pinned", width=3)
+    table.add_column("account name", style="cyan")
+    for idx, (account_id, pinned, account_name) in enumerate(accounts, start=1):
+        table.add_row(str(idx), str(pinned), account_name)
     console.print(table)
     conn.close()
 
 
 @click.command()
-@click.argument("selection", required=False)
-def add_timer(selection):
+def add_timer():
     """
-    Add a timer. SELECTION can be a position number of an existing account or a new account name.
-
-    If SELECTION is not provided, the list of accounts will be displayed, and the user will be prompted.
+    Add a timer. Use fuzzy autocompletion to select or create an account.
     """
     conn = setup_database()
     cursor = conn.cursor()
 
-    # Fetch and display the list of accounts
+    # Fetch all account names and positions for autocompletion
     cursor.execute("SELECT account_id, account_name FROM Accounts")
     accounts = cursor.fetchall()
 
-    if not accounts:
-        console.print(
-            "[yellow]No accounts found. Please add an account first![/yellow]"
+    # Create a mapping of position and account names to account IDs
+    account_completions = {}
+    for idx, (account_id, account_name) in enumerate(accounts, start=1):
+        account_completions[str(idx)] = account_id  # Map position to account_id
+        account_completions[account_name.lower()] = account_id  # Map name to account_id
+
+    # Create a FuzzyCompleter with account names and positions
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+
+    # Use PromptSession for fuzzy autocompletion
+    session = PromptSession()
+    try:
+        selection = session.prompt(
+            "Enter account position or name: ",
+            completer=completer,
+            complete_while_typing=True,
         )
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
         conn.close()
         return
 
-    table = Table(title="Accounts", expand=True)
-    table.add_column("Position", justify="right")
-    table.add_column("Account Name", style="cyan")
-    for idx, (account_id, account_name) in enumerate(accounts, start=1):
-        table.add_row(str(idx), account_name)
-    console.print(table)
-
-    # Prompt the user for input if SELECTION is not provided
-    if not selection:
-        selection = Prompt.ask("Enter account position or new account name")
-
-    # Handle position-based selection
-    if selection.isdigit():
-        position = int(selection)
-        if 1 <= position <= len(accounts):
-            account_id = accounts[position - 1][0]
-        else:
-            console.print("[red]Invalid position![/red]")
-            conn.close()
-            return
-    else:
-        # Handle new account creation
-        account_name = selection
-        cursor.execute(
-            "INSERT INTO Accounts (account_name) VALUES (?)", (account_name,)
-        )
+    # Resolve selection to account_id
+    account_id = account_completions.get(selection.lower())
+    if not account_id:  # If input is a new account name
+        cursor.execute("INSERT INTO Accounts (account_name) VALUES (?)", (selection,))
         conn.commit()
         account_id = cursor.lastrowid
 
@@ -161,7 +168,7 @@ def _list_timers():
         timers, start=1
     ):
         elapsed = timedelta + (now - start_time if status == "running" else 0)
-        status_color = "green" if status == "running" else "red"
+        status_color = "green" if status == "running" else "blue"
         table.add_row(
             str(idx),
             account_name,
@@ -180,7 +187,7 @@ def start_timer(position):
     conn = setup_database()
     cursor = conn.cursor()
 
-    now = round(datetime.datetime.now().timestamp())
+    now = timestamp()
 
     # Stop the currently running timer (if any)
     cursor.execute(
@@ -230,7 +237,7 @@ def stop_timer(position):
     conn = setup_database()
     cursor = conn.cursor()
 
-    now = round(datetime.datetime.now().timestamp())
+    now = timestamp()
 
     # Get the timer to stop
     cursor.execute(
