@@ -5,17 +5,11 @@
 
 # Chat
 
-I need commands for two types of reports. Both commands take a datetime argument.
+1. Add a method "archive_timers" to set the status to "inactive" for all timers with "datetime" entries < 00:00 hours on the current date. It would be nice if this command could be executed automatically when any command is executed for the first time in a new day. 
 
-- For the Year and Week containing the datetime specified: total of all timers for that week
-    - for each day in that week (beginning with Monday): total of all timers for that day
-        - each timer for the day ordered by account and datetime
+2. In list_timers provide an option to include all timers, i.e., timers with any status in ('inactive', 'running', 'paused'), but make the default only to show timers with status in ('running', 'paused'). 
 
-- For the Year and Month containing the datetime specified: total of all timers for that month
-    - for each account: total from all timers for that account for that year and month
-        - each timer for that account for that year and month ordered by datetime
-
-
+- Make the "start_date" optional in "report-account". When not given, do not prompt for end_date and create report for all months
 
 
 

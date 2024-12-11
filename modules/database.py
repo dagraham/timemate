@@ -1,6 +1,7 @@
 import datetime
 import json
 import math
+import os
 import sqlite3
 from typing import Literal
 
@@ -13,17 +14,66 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
+
 # Other imports and functions remain unchanged...
+def archive_timers(conn=None):
+    """
+    Archive timers by setting the status to 'inactive' for all timers with 'datetime' entries earlier than 00:00 of the current date.
+    """
+    if conn is None:
+        conn = setup_database()
+
+    cursor = conn.cursor()
+
+    # Calculate the cutoff timestamp for the current day
+    now = datetime.datetime.now()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+    # Update status for timers
+    cursor.execute(
+        """
+        UPDATE Times
+        SET status = 'inactive'
+        WHERE datetime < ? AND status != 'inactive'
+        """,
+        (midnight,),
+    )
+    conn.commit()
 
 
-# Replace @click.group() with @shell()
+def should_archive_today():
+    """
+    Check if archiving is needed for today by storing the last run date in a temporary file.
+    """
+    state_file = "archive_state.txt"
+
+    # Get today's date
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    # Check the state file
+    if os.path.exists(state_file):
+        with open(state_file, "r") as f:
+            last_archived_date = f.read().strip()
+        if last_archived_date == today:
+            return False
+
+    # Update the state file
+    with open(state_file, "w") as f:
+        f.write(today)
+
+    return True
+
+
 @shell(
     prompt="TimeMate> ",
     intro="Welcome to the Time Mate shell! Type ? or help for commands.",
 )
 def cli():
     """Time Mate: A CLI Timer Manager."""
-    pass
+    # Perform archiving before the first command of the day
+    conn = setup_database()
+    if should_archive_today():
+        archive_timers(conn)
 
 
 # Commands remain unchanged...
@@ -212,21 +262,35 @@ def add_timer():
 
 
 @click.command()
-def list_timers():
-    """List active timers."""
-    _list_timers()
+@click.option(
+    "--all", is_flag=True, default=False, help="Include timers with any status."
+)
+def list_timers(all):
+    """
+    List timers. By default, shows only timers with status in ('running', 'paused').
+    """
+    _list_timers(all)
 
 
-def _list_timers():
+def _list_timers(include_all=False):
     conn = setup_database()
     cursor = conn.cursor()
 
+    if include_all:
+        status_filter = "1 = 1"  # No filter, include all statuses
+        console.print("[blue]Displaying all timers:[/blue]")
+    else:
+        status_filter = "status IN ('running', 'paused')"
+        console.print("[blue]Displaying active timers (running, paused):[/blue]")
+
+    # Fetch timers based on the filter
     cursor.execute(
-        """
+        f"""
         SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
-        WHERE T.status IN ('paused', 'running')
+        WHERE {status_filter}
+        ORDER BY T.status DESC, T.datetime
         """
     )
     timers = cursor.fetchall()
@@ -237,22 +301,21 @@ def _list_timers():
     table.add_column("memo", justify="center", width=15)
     table.add_column("status", justify="center", style="green", width=6)
     table.add_column("time", justify="right")
-    table.add_column("date", justify="right")
 
     now = round(datetime.datetime.now().timestamp())
-    for idx, (time_id, account_name, memo, status, timedelta, timer_time) in enumerate(
+    for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
         timers, start=1
     ):
         elapsed = timedelta + (now - start_time if status == "running" else 0)
-        status_color = "green" if status == "running" else "blue"
+        status_color = (
+            "green" if status == "running" else "blue" if status == "paused" else "dim"
+        )
         table.add_row(
             str(idx),
             f"[{status_color}]{account_name}[/{status_color}]",
             f"[{status_color}]{memo}[/{status_color}]",
             f"[{status_color}]{status}[/{status_color}]",
             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
-            # f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
-            f"[{status_color}]{format_dt(timer_time)}[/{status_color}]",
         )
 
     console.print(table)
@@ -398,7 +461,7 @@ def report_week(report_date):
             continue
         # click.echo(f"{day_total = }")
         console.print(
-            f"\n{day.date()} - [yellow]{format_hours_and_tenths(day_total)}[/yellow]"
+            f"\n[bold][green]{day.strftime('%a %b %-d')}[/green] - [yellow]{format_hours_and_tenths(day_total)}[/yellow][/bold]"
         )
 
         # Timers for the day
@@ -516,8 +579,9 @@ def report_month():
 @click.command()
 def report_account():
     """
-    Generate a monthly report for a specific account and range of months.
-    Prompts for account, starting month, and optional ending month.
+    Generate a monthly report for a specific account.
+    Prompts for account and optionally for a starting month.
+    If no starting month is provided, generates a report for all months.
     """
     conn = setup_database()
     cursor = conn.cursor()
@@ -555,12 +619,17 @@ def report_account():
 
     account_id, account_name = account  # Get original case account name and ID
 
-    # Prompt for starting month
+    # Prompt for starting month (optional)
     try:
-        start_date = session.prompt(
-            "Enter starting month (YYYY-MM): ",
+        start_date_input = session.prompt(
+            "Enter starting month (YYYY-MM) (press Enter to include all months): ",
+            default="",
         )
-        start_date = datetime.datetime.strptime(start_date, "%Y-%m")
+        start_date = (
+            datetime.datetime.strptime(start_date_input, "%Y-%m")
+            if start_date_input
+            else None
+        )
     except ValueError:
         console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
         conn.close()
@@ -570,32 +639,54 @@ def report_account():
         conn.close()
         return
 
-    # Prompt for optional ending month
-    try:
-        end_date = session.prompt(
-            "Enter ending month (YYYY-MM) (press Enter to use the same as starting month): ",
-            default=start_date.strftime("%Y-%m"),
+    # Generate report for all months if no start_date is provided
+    if not start_date:
+        month_str = "All months"
+        cursor.execute(
+            """
+            SELECT MIN(datetime), MAX(datetime)
+            FROM Times
+            WHERE account_id = ?
+            """,
+            (account_id,),
         )
-        end_date = datetime.datetime.strptime(end_date, "%Y-%m")
-    except ValueError:
-        console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
-        conn.close()
-        return
-    except KeyboardInterrupt:
-        console.print("[red]Cancelled by user.[/red]")
-        conn.close()
-        return
+        date_range = cursor.fetchone()
+        if not date_range or not date_range[0]:
+            console.print(
+                f"[yellow]No records found for account '{account_name}'.[/yellow]"
+            )
+            conn.close()
+            return
 
-    # Validate date range
-    if end_date < start_date:
-        console.print("[red]Ending month cannot be before starting month![/red]")
-        conn.close()
-        return
+        start_date = datetime.datetime.fromtimestamp(date_range[0])
+        end_date = datetime.datetime.fromtimestamp(date_range[1])
+    else:
+        # Prompt for optional ending month if start_date is given
+        month_str = "Selected months"
+        try:
+            end_date_input = session.prompt(
+                "Enter ending month (YYYY-MM) (press Enter to use the same as starting month): ",
+                default=start_date.strftime("%Y-%m"),
+            )
+            end_date = datetime.datetime.strptime(end_date_input, "%Y-%m")
+        except ValueError:
+            console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+            conn.close()
+            return
+        except KeyboardInterrupt:
+            console.print("[red]Cancelled by user.[/red]")
+            conn.close()
+            return
+
+        if end_date < start_date:
+            console.print("[red]Ending month cannot be before starting month![/red]")
+            conn.close()
+            return
 
     # Generate report
     current_date = start_date
     console.print(
-        f"\n[bold cyan]Monthly Report for {account_name}[/bold cyan]"
+        f"\n[bold cyan]{month_str} for {account_name}[/bold cyan]"
     )  # Use original case account name
     while current_date <= end_date:
         month_start = current_date.replace(day=1)
@@ -636,7 +727,7 @@ def report_account():
             )
             memo_str = f" ({memo})" if memo else ""
             console.print(
-                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
+                f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
             )
 
         # Move to the next month
