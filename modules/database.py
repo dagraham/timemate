@@ -394,8 +394,11 @@ def report_week(report_date):
             (day.timestamp(), (day + datetime.timedelta(days=1)).timestamp()),
         )
         day_total = cursor.fetchone()[0] or 0
+        if day_total == 0:
+            continue
+        # click.echo(f"{day_total = }")
         console.print(
-            f"\n[bold]Day: {day.date()}[/bold] - Total Time: [yellow]{format_hours_and_tenths(day_total)}[/yellow]"
+            f"\n{day.date()} - [yellow]{format_hours_and_tenths(day_total)}[/yellow]"
         )
 
         # Timers for the day
@@ -413,11 +416,11 @@ def report_week(report_date):
 
         for account_name, timedelta, datetime_val, memo in timers:
             datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
-                "%y-%m-%d %H:%M"
+                "%H:%M"
             )
             memo_str = f" ({memo})" if memo else ""
             console.print(
-                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [#6699ff]{account_name}[/#6699ff] @ [green]{datetime_str}[/green]{memo_str}"
+                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str} [#6699ff]{account_name}[/#6699ff] "
             )
 
     conn.close()
@@ -449,11 +452,9 @@ def report_month(report_date):
     month_total = cursor.fetchone()[0] or 0
 
     console.print(
-        f"\n[bold cyan]Monthly Report[/bold cyan] ({month_start.date()} to {month_end.date()}):"
+        f"\n[bold][cyan]Monthly Report[/cyan] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(month_total)}[/yellow][/bold]"
     )
-    console.print(
-        f"Total Time: [yellow]{format_hours_and_tenths(month_total)}[/yellow]"
-    )
+    # console.print(f"Total: [yellow]{format_hours_and_tenths(month_total)}[/yellow]")
 
     # Breakdown by account
     cursor.execute(
@@ -471,7 +472,7 @@ def report_month(report_date):
 
     for account_name, account_total in accounts:
         console.print(
-            f"\n[bold]{account_name}[/bold] - Total Time: [yellow]{format_hours_and_tenths(account_total)}[/yellow]"
+            f"\n[bold][#6699ff]{account_name}[/#6699ff] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
         )
 
         # Timers for the account
@@ -489,12 +490,144 @@ def report_month(report_date):
 
         for timedelta, datetime_val, memo in timers:
             datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
-                "%y-%m-%d %H:%M"
+                "%d %H:%M"
             )
             memo_str = f" ({memo})" if memo else ""
             console.print(
-                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] @ [green]{datetime_str}[/green]{memo_str}"
+                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
             )
+
+    conn.close()
+
+
+@click.command()
+def report_account():
+    """
+    Generate a monthly report for a specific account and range of months.
+    Prompts for account, starting month, and optional ending month.
+    """
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Fetch account names for autocompletion
+    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    accounts = cursor.fetchall()
+
+    account_completions = {
+        account_name.lower(): (account_id, account_name)
+        for account_id, account_name in accounts
+    }
+
+    # Prompt for account using fuzzy autocompletion
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+    session = PromptSession()
+    try:
+        selected_name = session.prompt(
+            "Enter account name: ",
+            completer=completer,
+            complete_while_typing=True,
+        ).lower()
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    account = account_completions.get(selected_name)
+    if not account:
+        console.print(f"[red]Account '{selected_name}' not found![/red]")
+        conn.close()
+        return
+
+    account_id, account_name = account  # Get original case account name and ID
+
+    # Prompt for starting month
+    try:
+        start_date = session.prompt(
+            "Enter starting month (YYYY-MM): ",
+        )
+        start_date = datetime.datetime.strptime(start_date, "%Y-%m")
+    except ValueError:
+        console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+        conn.close()
+        return
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Prompt for optional ending month
+    try:
+        end_date = session.prompt(
+            "Enter ending month (YYYY-MM) (press Enter to use the same as starting month): ",
+            default=start_date.strftime("%Y-%m"),
+        )
+        end_date = datetime.datetime.strptime(end_date, "%Y-%m")
+    except ValueError:
+        console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+        conn.close()
+        return
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Validate date range
+    if end_date < start_date:
+        console.print("[red]Ending month cannot be before starting month![/red]")
+        conn.close()
+        return
+
+    # Generate report
+    current_date = start_date
+    console.print(
+        f"\n[bold cyan]Monthly Report for {account_name}[/bold cyan]"
+    )  # Use original case account name
+    while current_date <= end_date:
+        month_start = current_date.replace(day=1)
+        next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
+        month_end = next_month - datetime.timedelta(seconds=1)
+
+        # Total time for the month
+        cursor.execute(
+            """
+            SELECT SUM(T.timedelta)
+            FROM Times T
+            WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+            """,
+            (account_id, month_start.timestamp(), month_end.timestamp()),
+        )
+        month_total = cursor.fetchone()[0] or 0
+
+        console.print(
+            f"\n[bold][#6699ff]{account_name}[#6699ff] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(month_total)}[/yellow][/bold]"
+        )
+        # console.print(f"Total: {format_hours_and_tenths(month_total)}")
+
+        # Timers for the account in this month
+        cursor.execute(
+            """
+            SELECT T.timedelta, T.datetime, T.memo
+            FROM Times T
+            WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+            ORDER BY T.datetime
+            """,
+            (account_id, month_start.timestamp(), month_end.timestamp()),
+        )
+        timers = cursor.fetchall()
+
+        for timedelta, datetime_val, memo in timers:
+            datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
+                "%d %H:%M"
+            )
+            memo_str = f" ({memo})" if memo else ""
+            console.print(
+                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
+            )
+
+        # Move to the next month
+        current_date = next_month
 
     conn.close()
 
@@ -588,6 +721,7 @@ cli.add_command(add_timer)
 cli.add_command(list_timers)
 cli.add_command(timer_start)
 cli.add_command(timer_pause)
+cli.add_command(report_account)
 cli.add_command(report_month)
 cli.add_command(report_week)
 cli.add_command(populate)
