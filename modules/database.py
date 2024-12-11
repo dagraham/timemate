@@ -427,13 +427,27 @@ def report_week(report_date):
 
 
 @click.command()
-@click.argument("report_date", type=click.DateTime(formats=["%Y-%m-%d"]))
-def report_month(report_date):
+def report_month():
     """
-    Generate a monthly report for the month containing REPORT_DATE (format: YYYY-MM-DD).
+    Generate a monthly report for the month containing a specified date.
+    Prompts for the month in YYYY-MM format.
     """
     conn = setup_database()
     cursor = conn.cursor()
+
+    # Prompt for month (YYYY-MM format)
+    session = PromptSession()
+    try:
+        month_input = session.prompt("Enter the month for the report (YYYY-MM): ")
+        report_date = datetime.datetime.strptime(month_input, "%Y-%m")
+    except ValueError:
+        console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+        conn.close()
+        return
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
 
     # Calculate the start and end of the month
     month_start = report_date.replace(day=1)
@@ -454,7 +468,6 @@ def report_month(report_date):
     console.print(
         f"\n[bold][cyan]Monthly Report[/cyan] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(month_total)}[/yellow][/bold]"
     )
-    # console.print(f"Total: [yellow]{format_hours_and_tenths(month_total)}[/yellow]")
 
     # Breakdown by account
     cursor.execute(
