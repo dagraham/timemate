@@ -16,13 +16,12 @@ from rich.table import Table
 
 
 # Other imports and functions remain unchanged...
-def archive_timers(conn=None):
+@click.command()
+def archive_timers():
     """
-    Archive timers by setting the status to 'inactive' for all timers with 'datetime' entries earlier than 00:00 of the current date.
+    Archive timers by setting the status to 'inactive' for all timers with start times before today.
     """
-    if conn is None:
-        conn = setup_database()
-
+    conn = setup_database()
     cursor = conn.cursor()
 
     # Calculate the cutoff timestamp for the current day
@@ -39,44 +38,24 @@ def archive_timers(conn=None):
         (midnight,),
     )
     conn.commit()
-
-
-def should_archive_today():
-    """
-    Check if archiving is needed for today by storing the last run date in a temporary file.
-    """
-    state_file = "archive_state.txt"
-
-    # Get today's date
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-
-    # Check the state file
-    if os.path.exists(state_file):
-        with open(state_file, "r") as f:
-            last_archived_date = f.read().strip()
-        if last_archived_date == today:
-            return False
-
-    # Update the state file
-    with open(state_file, "w") as f:
-        f.write(today)
-
-    return True
+    console.print(
+        "[green]Timers with start times before today have been archived![/green]"
+    )
+    conn.close()
 
 
 @shell(
     prompt="TimeMate> ",
-    intro="Welcome to the Time Mate shell! Type ? or help for commands.",
+    intro="Welcome to the TimeMate shell! Type ? or help for commands.",
 )
 def cli():
-    """Time Mate: A CLI Timer Manager."""
-    # Perform archiving before the first command of the day
+    """Time Mate: A CLI Timer Manager.
+
+    Started without any options, open a TimeMate shell.
+    """
     conn = setup_database()
-    if should_archive_today():
-        archive_timers(conn)
 
 
-# Commands remain unchanged...
 @click.command()
 @click.argument("account_name")
 def add_account(account_name):
@@ -290,7 +269,7 @@ def _list_timers(include_all=False):
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE {status_filter}
-        ORDER BY T.status DESC, T.datetime
+        ORDER BY T.time_id
         """
     )
     timers = cursor.fetchall()
@@ -298,9 +277,10 @@ def _list_timers(include_all=False):
     table = Table(title="Timers", expand=True)
     table.add_column("row", justify="center", width=3, style="dim")
     table.add_column("account name", width=15)
-    table.add_column("memo", justify="center", width=15)
+    table.add_column("memo", justify="center", width=8)
     table.add_column("status", justify="center", style="green", width=6)
-    table.add_column("time", justify="right")
+    table.add_column("time", justify="right", width=3),
+    table.add_column("date", justify="center", width=10)
 
     now = round(datetime.datetime.now().timestamp())
     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
@@ -308,7 +288,9 @@ def _list_timers(include_all=False):
     ):
         elapsed = timedelta + (now - start_time if status == "running" else 0)
         status_color = (
-            "green" if status == "running" else "blue" if status == "paused" else "dim"
+            "yellow"
+            if status == "running"
+            else "green" if status == "paused" else "blue"
         )
         table.add_row(
             str(idx),
@@ -316,8 +298,9 @@ def _list_timers(include_all=False):
             f"[{status_color}]{memo}[/{status_color}]",
             f"[{status_color}]{status}[/{status_color}]",
             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
+            f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
         )
-
+    console.clear()
     console.print(table)
     conn.close()
 
@@ -331,22 +314,12 @@ def timer_start(position):
 
     now = timestamp()
 
-    # Stop the currently running timer (if any)
-    cursor.execute(
-        """
-        UPDATE Times
-        SET status = 'paused', timedelta = timedelta + (? - datetime), datetime = NULL
-        WHERE status = 'running'
-        """,
-        (now,),
-    )
-
     # Get the timer to start
     cursor.execute(
         """
-        SELECT time_id
+        SELECT time_id, account_id, memo, datetime, timedelta, status
         FROM Times
-        WHERE status IN ('paused', 'running')
+        WHERE status IN ('paused', 'running', 'inactive')
         ORDER BY time_id LIMIT 1 OFFSET ?
         """,
         (position - 1,),
@@ -354,20 +327,45 @@ def timer_start(position):
     row = cursor.fetchone()
 
     if row:
-        time_id = row[0]
-        cursor.execute(
-            """
-            UPDATE Times
-            SET status = 'running', datetime = ?
-            WHERE time_id = ?
-            """,
-            (now, time_id),
-        )
-        conn.commit()
-        console.print(f"[green]Timer {position} started![/green]")
+        time_id, account_id, memo, start_time, timedelta, status = row
+        if start_time and start_time < now - (now % 86400):  # Timer from a previous day
+            # Create a new timer
+            cursor.execute(
+                """
+                INSERT INTO Times (account_id, memo, status, timedelta, datetime)
+                VALUES (?, ?, 'running', 0, ?)
+                """,
+                (account_id, memo, now),
+            )
+            new_timer_id = cursor.lastrowid
+            console.print(
+                f"[yellow]Timer from a previous day detected. Created a new timer with ID {new_timer_id}.[/yellow]"
+            )
+        else:
+            # Stop the currently running timer (if any)
+            cursor.execute(
+                """
+                UPDATE Times
+                SET status = 'paused', timedelta = timedelta + (? - datetime), datetime = NULL
+                WHERE status = 'running'
+                """,
+                (now,),
+            )
+
+            # Start the selected timer
+            cursor.execute(
+                """
+                UPDATE Times
+                SET status = 'running', datetime = ?
+                WHERE time_id = ?
+                """,
+                (now, time_id),
+            )
+            console.print(f"[green]Timer {position} started![/green]")
     else:
         console.print("[red]Invalid position![/red]")
 
+    conn.commit()
     conn.close()
     _list_timers()
 
@@ -829,6 +827,12 @@ cli.add_command(report_account)
 cli.add_command(report_month)
 cli.add_command(report_week)
 cli.add_command(populate)
+cli.add_command(archive_timers)  # New archive_timers command
+
+
+def main():
+    cli()
+
 
 if __name__ == "__main__":
-    cli()
+    main()

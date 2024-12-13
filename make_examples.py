@@ -49,44 +49,11 @@ def prevMonth(dt: datetime):
 last_date = datetime.now()
 start_date = prevMonth(prevMonth(begMonth(last_date)))
 
-# month_days = {
-#     1: 31,
-#     2: 28,
-#     3: 31,
-#     4: 30,
-#     5: 31,
-#     6: 30,
-#     7: 31,
-#     8: 31,
-#     9: 30,
-#     10: 31,
-#     11: 30,
-#     12: 31,
-# }
-
 start_minutes = 9 * 60  # 09:00H
 end_minutes = 17 * 60  # 17:00H
 
 idle_minutes = [x for x in range(12, 91, 6)]
 timer_minutes = [x for x in range(24, 85, 6)]
-
-# today = date.today()
-# this_year = today.year
-# this_month = today.strftime("%Y-%m")
-# this_day = today.day
-#
-# if this_month >= 3:
-#     months = [
-#         (this_year, this_month - 2),
-#         (this_year, this_month - 1),
-#         (this_year, this_month),
-#     ]
-# elif this_month >= 2:
-#     months = [(this_year - 1, 12), (this_year, this_month - 1), (this_year, this_month)]
-# else:
-#     months = [(this_year - 1, 11), (this_year - 1, 12), (this_year, this_month)]
-#
-# num_days = month_days[months[0]] + month_days[months[1]] + this_day
 
 times = []
 
@@ -115,19 +82,6 @@ while dt < last_date:
 data = {"accounts": accounts, "times": times}
 
 print(data)
-
-
-"""
-{
-  "accounts": [
-    {"name": "Work"},
-    {"name": "Exercise"}
-  ],
-  "times": [
-    {"account_name": "Work", "memo": "Meeting", "timedelta": 3600, "datetime": 1672444800}
-  ]
-}
-"""
 
 
 def make_examples(egfile: str):
