@@ -1,8 +1,10 @@
 import datetime
+import inspect
 import json
 import math
 import os
 import sqlite3
+from pathlib import Path
 from typing import Literal
 
 import click
@@ -13,6 +15,38 @@ from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
+
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, timemate_home
+from .__version__ import version
+
+
+def timestamp():
+    return round(datetime.datetime.now().timestamp())
+
+
+def format_datetime(
+    seconds: int, fmt: str = "%Y-%m-%d %H:%M %Z", stage: int = 1
+) -> str:
+    return f"{datetime.datetime.fromtimestamp(seconds).astimezone().strftime(fmt)}"
+
+
+def click_log(msg: str):
+    # Get the name of the calling function
+    caller_name = inspect.stack()[1].function
+    ts = timestamp()
+    log_name = format_datetime(ts, "%Y-%m-%d.log")
+
+    # Format the log message
+    with open(os.path.join(log_dir, log_name), "a") as debug_file:
+        msg = f"\nclick_log {format_datetime(timestamp())} [{caller_name}]\n{msg}"
+        click.echo(
+            msg,
+        )
+
+
+click_log(
+    f"{timemate_home = }; {backup_dir = }; {log_dir =}, {db_path = }; {version = }"
+)
 
 
 # Other imports and functions remain unchanged...
@@ -82,10 +116,6 @@ MINUTES = 6
 console = Console()
 
 
-def timestamp():
-    return round(datetime.datetime.now().timestamp())
-
-
 def format_hours_and_tenths(total_seconds: int, round_up: AllowedMinutes = MINUTES):
     """
     Convert seconds into hours and tenths of an hour rounding up to the nearest AllowedMinutes.
@@ -135,7 +165,7 @@ def format_hours_minutes_seconds(total_seconds: int) -> str:
 
 
 def setup_database():
-    conn = sqlite3.connect("time_mate.db")  # Use a persistent SQLite database
+    conn = sqlite3.connect(db_path)  # Use a persistent SQLite database
     cursor = conn.cursor()
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS Accounts (
@@ -238,6 +268,19 @@ def add_timer():
     conn.commit()
     console.print("[green]Timer added successfully![/green]")
     conn.close()
+
+
+@cli.command(short_help="Shows info for TimeMate")
+def settings():
+    """Show application information."""
+    console.print(
+        f"""\
+[#87CEFA]Time Mate[/#87CEFA]
+version: [green]{version}[/green]
+config:  [green]{CONFIG_FILE}[/green]
+home:    [green]{timemate_home}[/green]
+"""
+    )
 
 
 @click.command()
@@ -817,6 +860,68 @@ def populate(file, format):
     console.print("[green]Database populated successfully![/green]")
 
 
+@cli.command("set-home")
+@click.argument("home", required=False)  # Optional argument for the home directory
+def set_home(home):
+    """
+    Set or clear a temporary home directory for IDEA_NURSERY.
+    Provide a path to use as a temporary directory or
+    enter nothing to stop using a temporary directory.
+    """
+    if home is None:
+        # No argument provided, clear configuration
+        update_tmp_home("")
+    else:
+        # Argument provided, set configuration
+        update_tmp_home(home)
+
+
+def is_valid_path(path):
+    """
+    Check if a given path is a valid directory.
+    """
+    path = Path(path).expanduser()
+
+    # Check if the path exists and is a directory
+    if path.exists():
+        if path.is_dir():
+            if os.access(path, os.W_OK):  # Check if writable
+                return True, f"{path} is a valid and writable directory."
+            else:
+                return False, f"{path} is not writable."
+        else:
+            return False, f"{path} exists but is not a directory."
+    else:
+        # Try to create the directory
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            return True, f"{path} did not exist but has been created."
+        except OSError as e:
+            return False, f"Cannot create directory at {path}: {e}"
+
+
+def update_tmp_home(tmp_home: str = ""):
+    """
+    Save the IDEA path to the configuration file.
+    """
+    tmp_home = tmp_home.strip()
+    if tmp_home:
+        is_valid, message = is_valid_path(tmp_home)
+        if is_valid:
+            console.print(message)
+            config = {"TIMEMATEHOME": tmp_home}
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f)
+            console.print(f"Configuration saved to {CONFIG_FILE}")
+        else:
+            console.print(f"[red]An unexpected error occurred: {message}[/red]")
+    elif os.path.exists(CONFIG_FILE):
+        os.remove(CONFIG_FILE)
+        console.print(f"[green]Temporary home directory use cancelled[/green]")
+    else:
+        console.print(f"[yellow]Temporary home directory not in use[/yellow]")
+
+
 cli.add_command(add_account)
 cli.add_command(list_accounts)
 cli.add_command(add_timer)
@@ -826,6 +931,8 @@ cli.add_command(timer_pause)
 cli.add_command(report_account)
 cli.add_command(report_month)
 cli.add_command(report_week)
+cli.add_command(set_home)
+cli.add_command(settings)
 cli.add_command(populate)
 cli.add_command(archive_timers)  # New archive_timers command
 

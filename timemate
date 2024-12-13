@@ -1,0 +1,6 @@
+#! /usr/bin/env python3
+from modules import timemate
+
+if __name__ == "__main__":
+    timemate.main()
+
