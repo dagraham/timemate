@@ -20,7 +20,7 @@ Automatically updates the timer for time spent and, when starting a timer on a n
     list times spent by month for a specified account with options to specify all months for the account, a range of months or a specific month
 
       Here is an illustration of a monthly report for the "Johnson, Noah" account. The memo field is shown in parentheses.
-        
+        ```
         Johnson, Noah Nov 2024 - 12.6h
           0.8h 02 10:42 (meeting)
           0.5h 03 12:36 (research)
@@ -35,3 +35,4 @@ Automatically updates the timer for time spent and, when starting a timer on a n
           1.0h 28 11:06 (travel)
           1.3h 29 15:24 (research)
           0.9h 30 14:48 (research)
+        ```
