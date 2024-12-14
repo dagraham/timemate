@@ -4,6 +4,8 @@ import sys
 
 CONFIG_FILE = os.path.expanduser("~/.timemate_config")
 
+pos_to_id = {}
+
 
 def process_arguments():
     """
