@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
-from . import CONFIG_FILE, backup_dir, db_path, log_dir, timemate_home
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
 
 
@@ -41,6 +41,7 @@ def click_log(msg: str):
         msg = f"\nclick_log {format_datetime(timestamp())} [{caller_name}]\n{msg}"
         click.echo(
             msg,
+            file=debug_file,
         )
 
 
@@ -111,7 +112,7 @@ def add_account(account_name):
 
 
 AllowedMinutes = Literal[0, 1, 6, 12, 30, 60]
-MINUTES = 6
+MINUTES = 1
 
 console = Console()
 
@@ -261,9 +262,10 @@ def add_timer():
         return
 
     # Add the timer
+    now = timestamp()
     cursor.execute(
-        "INSERT INTO Times (account_id, memo, status, timedelta, datetime) VALUES (?, ?, 'paused', 0, NULL)",
-        (account_id, memo),
+        "INSERT INTO Times (account_id, memo, status, timedelta, datetime) VALUES (?, ?, 'paused', 0, ?)",
+        (account_id, memo, now),
     )
     conn.commit()
     console.print("[green]Timer added successfully![/green]")
@@ -273,6 +275,11 @@ def add_timer():
 @cli.command(short_help="Shows info for TimeMate")
 def settings():
     """Show application information."""
+
+    _settings()
+
+
+def _settings():
     console.print(
         f"""\
 [#87CEFA]Time Mate[/#87CEFA]
@@ -295,6 +302,7 @@ def list_timers(all):
 
 
 def _list_timers(include_all=False):
+    global pos_to_id
     conn = setup_database()
     cursor = conn.cursor()
 
@@ -322,13 +330,14 @@ def _list_timers(include_all=False):
     table.add_column("account name", width=15)
     table.add_column("memo", justify="center", width=8)
     table.add_column("status", justify="center", style="green", width=6)
-    table.add_column("time", justify="right", width=3),
+    table.add_column("time", justify="right", width=4),
     table.add_column("date", justify="center", width=10)
 
     now = round(datetime.datetime.now().timestamp())
     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
         timers, start=1
     ):
+        pos_to_id[idx] = time_id
         elapsed = timedelta + (now - start_time if status == "running" else 0)
         status_color = (
             "yellow"
@@ -352,59 +361,76 @@ def _list_timers(include_all=False):
 @click.argument("position", type=int)
 def timer_start(position):
     """Start a timer."""
+    time_id = pos_to_id.get(position)
+    click_log(f"got {time_id = } from {position = }")
+
     conn = setup_database()
     cursor = conn.cursor()
 
     now = timestamp()
-
-    # Get the timer to start
+    today = round(
+        datetime.datetime.now().replace(hour=0, minute=0, second=0).timestamp()
+    )
+    # Stop the currently running timer (if any)
     cursor.execute(
         """
-        SELECT time_id, account_id, memo, datetime, timedelta, status
-        FROM Times
-        WHERE status IN ('paused', 'running', 'inactive')
-        ORDER BY time_id LIMIT 1 OFFSET ?
+        UPDATE Times
+        SET status = 'paused', timedelta = timedelta + (? - datetime), datetime = ?
+        WHERE status = 'running'
         """,
-        (position - 1,),
+        (now, now),
     )
-    row = cursor.fetchone()
 
-    if row:
-        time_id, account_id, memo, start_time, timedelta, status = row
-        if start_time and start_time < now - (now % 86400):  # Timer from a previous day
-            # Create a new timer
-            cursor.execute(
-                """
-                INSERT INTO Times (account_id, memo, status, timedelta, datetime)
-                VALUES (?, ?, 'running', 0, ?)
-                """,
-                (account_id, memo, now),
-            )
-            new_timer_id = cursor.lastrowid
-            console.print(
-                f"[yellow]Timer from a previous day detected. Created a new timer with ID {new_timer_id}.[/yellow]"
-            )
-        else:
-            # Stop the currently running timer (if any)
-            cursor.execute(
-                """
-                UPDATE Times
-                SET status = 'paused', timedelta = timedelta + (? - datetime), datetime = NULL
-                WHERE status = 'running'
-                """,
-                (now,),
-            )
+    if time_id:
+        cursor.execute(
+            """
+            SELECT time_id, account_id, memo, datetime, timedelta, status
+            FROM Times
+            WHERE time_id = ? 
+            """,
+            (time_id,),
+        )
+        row = cursor.fetchone()
 
-            # Start the selected timer
-            cursor.execute(
-                """
-                UPDATE Times
-                SET status = 'running', datetime = ?
-                WHERE time_id = ?
-                """,
-                (now, time_id),
-            )
-            console.print(f"[green]Timer {position} started![/green]")
+        if row:
+            time_id, account_id, memo, start_time, timedelta, status = row
+            if start_time and start_time < today:  # Timer from a previous day
+                # Create a new timer
+                click_log(f"copying as a new timer")
+                cursor.execute(
+                    """
+                    INSERT INTO Times (account_id, memo, status, timedelta, datetime)
+                    VALUES (?, ?, 'running', 0, ?)
+                    """,
+                    (account_id, memo, now),
+                )
+                new_timer_id = cursor.lastrowid
+                console.print(
+                    f"[yellow]Timer from a previous day detected. Created a new timer with ID {new_timer_id}.[/yellow]"
+                )
+
+                click_log(f"archiving original timer")
+                cursor.execute(
+                    """
+                    UPDATE Times
+                    SET status = 'inactive'
+                    WHERE time_id = ?
+                    """,
+                    (time_id,),
+                )
+                conn.commit()
+
+            else:
+                # Start the selected timer
+                cursor.execute(
+                    """
+                    UPDATE Times
+                    SET status = 'running', datetime = ?
+                    WHERE time_id = ?
+                    """,
+                    (now, time_id),
+                )
+                console.print(f"[green]Timer {position} started![/green]")
     else:
         console.print("[red]Invalid position![/red]")
 
@@ -417,39 +443,42 @@ def timer_start(position):
 @click.argument("position", type=int)
 def timer_pause(position):
     """Pause a timer."""
+    time_id = pos_to_id.get(position)
+    click_log(f"got {time_id = } from {position = }")
+
     conn = setup_database()
     cursor = conn.cursor()
 
     now = timestamp()
 
-    # Get the timer to stop
-    cursor.execute(
-        """
-        SELECT time_id, datetime
-        FROM Times
-        WHERE status IN ('paused', 'running')
-        ORDER BY time_id LIMIT 1 OFFSET ?
-        """,
-        (position - 1,),
-    )
-    row = cursor.fetchone()
+    if time_id:
+        cursor.execute(
+            """
+            SELECT time_id, datetime
+            FROM Times
+            WHERE time_id = ?
+            """,
+            (time_id,),
+        )
 
-    if row:
-        time_id, start_time = row
-        if start_time is None:
-            console.print(f"[yellow]Timer {position} is already paused.[/yellow]")
-        else:
-            elapsed = now - start_time
-            cursor.execute(
-                """
-                UPDATE Times
-                SET status = 'paused', timedelta = timedelta + ?, datetime = ?
-                WHERE time_id = ?
-                """,
-                (elapsed, now, time_id),
-            )
-            conn.commit()
-            console.print(f"[yellow]Timer {position} stopped![/yellow]")
+        row = cursor.fetchone()
+
+        if row:
+            time_id, start_time = row
+            if start_time is None:
+                console.print(f"[yellow]Timer {position} is already paused.[/yellow]")
+            else:
+                elapsed = now - start_time
+                cursor.execute(
+                    """
+                    UPDATE Times
+                    SET status = 'paused', timedelta = timedelta + ?, datetime = ?
+                    WHERE time_id = ?
+                    """,
+                    (elapsed, now, time_id),
+                )
+                conn.commit()
+                console.print(f"[yellow]Timer {position} stopped![/yellow]")
     else:
         console.print("[red]Invalid position![/red]")
 
@@ -938,6 +967,8 @@ cli.add_command(archive_timers)  # New archive_timers command
 
 
 def main():
+    console.clear()
+    _settings()
     cli()
 
 
