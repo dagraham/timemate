@@ -1306,7 +1306,7 @@ def populate(file, format):
 @click.argument("home", required=False)  # Optional argument for the home directory
 def set_home(home):
     """
-    Set or clear a temporary home directory for IDEA_NURSERY.
+    Set or clear a temporary home directory for TimeMate.
     Provide a path to use as a temporary directory or
     enter nothing to stop using a temporary directory.
     """
@@ -1344,7 +1344,7 @@ def is_valid_path(path):
 
 def update_tmp_home(tmp_home: str = ""):
     """
-    Save the IDEA path to the configuration file.
+    Save the TimeMate path to the configuration file.
     """
     tmp_home = tmp_home.strip()
     if tmp_home:
