@@ -1,3 +1,11 @@
+# Forget me nots
+
+## setup.py
+
+`python setup.py check`
+
+`python setup.py sdist bdist_wheel`
+
 # ToDo
 
 - [ ] Add memo 
@@ -19,7 +27,7 @@
 
 - [ ] allow range of weeks in report-week with prompt like report-month
 
-- [ ] allow fuzzy (%LIKE%) matches in report-account
+- [x] allow fuzzy (%LIKE%) matches in report-account
 
 - [x] Don't automatically archive_timers, but have a command to make inactive a selected one. When timer-start is called with a paused timer for which the start_time is less than the current date, create a copy of the timer with the current datetime as the start_time and 0 as the timedelta.
 

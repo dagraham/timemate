@@ -1,6 +1,6 @@
 import sys
 
-from modules.idea import main
+from modules.timemate import main
 
 if __name__ == "__main__":
     main()
