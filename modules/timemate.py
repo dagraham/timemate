@@ -15,9 +15,15 @@ from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
+from rich.tree import Tree
 
 from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
+
+AllowedMinutes = Literal[0, 1, 6, 12, 30, 60]
+MINUTES = 6
+
+console = Console()
 
 
 def timestamp():
@@ -109,12 +115,6 @@ def add_account(account_name):
     except sqlite3.IntegrityError:
         console.print(f"[red]Account '{account_name}' already exists![/red]")
     conn.close()
-
-
-AllowedMinutes = Literal[0, 1, 6, 12, 30, 60]
-MINUTES = 1
-
-console = Console()
 
 
 def format_hours_and_tenths(total_seconds: int, round_up: AllowedMinutes = MINUTES):
@@ -316,7 +316,7 @@ def _list_timers(include_all=False):
     # Fetch timers based on the filter
     cursor.execute(
         f"""
-        SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime
+        SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime 
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE {status_filter}
@@ -487,7 +487,7 @@ def timer_pause(position):
 
 
 @click.command()
-@click.argument("report_date", type=click.DateTime(formats=["%Y-%m-%d"]))
+@click.argument("report_date", type=click.DateTime(formats=["%y-%m-%d"]))
 def report_week(report_date):
     """
     Generate a weekly report for the week containing REPORT_DATE (format: YYYY-MM-DD).
@@ -572,7 +572,7 @@ def report_month():
     session = PromptSession()
     try:
         month_input = session.prompt("Enter the month for the report (YYYY-MM): ")
-        report_date = datetime.datetime.strptime(month_input, "%Y-%m")
+        report_date = datetime.datetime.strptime(month_input, "%y-%m")
     except ValueError:
         console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
         conn.close()
@@ -649,14 +649,14 @@ def report_month():
 @click.command()
 def report_account():
     """
-    Generate a monthly report for a specific account.
-    Prompts for account and optionally for a starting month.
+    Generate a monthly report grouped by month and accounts matching a specific name or pattern.
+    Prompts for account name (supports fuzzy matching) and optionally for a starting month.
     If no starting month is provided, generates a report for all months.
     """
     conn = setup_database()
     cursor = conn.cursor()
 
-    # Fetch account names for autocompletion
+    # Fetch account names for fuzzy matching
     cursor.execute("SELECT account_id, account_name FROM Accounts")
     accounts = cursor.fetchall()
 
@@ -672,7 +672,7 @@ def report_account():
     session = PromptSession()
     try:
         selected_name = session.prompt(
-            "Enter account name: ",
+            "Enter account name (supports fuzzy matching): ",
             completer=completer,
             complete_while_typing=True,
         ).lower()
@@ -681,27 +681,34 @@ def report_account():
         conn.close()
         return
 
-    account = account_completions.get(selected_name)
-    if not account:
-        console.print(f"[red]Account '{selected_name}' not found![/red]")
+    # Find matching accounts
+    matching_accounts = [
+        (account_id, account_name)
+        for account_name_lower, (
+            account_id,
+            account_name,
+        ) in account_completions.items()
+        if selected_name in account_name_lower
+    ]
+
+    if not matching_accounts:
+        console.print(f"[red]No accounts found matching '{selected_name}'![/red]")
         conn.close()
         return
-
-    account_id, account_name = account  # Get original case account name and ID
 
     # Prompt for starting month (optional)
     try:
         start_date_input = session.prompt(
-            "Enter starting month (YYYY-MM) (press Enter to include all months): ",
+            "Enter starting month (YY-MM) (press Enter to include all months): ",
             default="",
         )
         start_date = (
-            datetime.datetime.strptime(start_date_input, "%Y-%m")
+            datetime.datetime.strptime(start_date_input, "%y-%m")
             if start_date_input
             else None
         )
     except ValueError:
-        console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+        console.print("[red]Invalid date format! Please use YY-MM.[/red]")
         conn.close()
         return
     except KeyboardInterrupt:
@@ -711,20 +718,15 @@ def report_account():
 
     # Generate report for all months if no start_date is provided
     if not start_date:
-        month_str = "All months"
         cursor.execute(
             """
             SELECT MIN(datetime), MAX(datetime)
             FROM Times
-            WHERE account_id = ?
-            """,
-            (account_id,),
+            """
         )
         date_range = cursor.fetchone()
         if not date_range or not date_range[0]:
-            console.print(
-                f"[yellow]No records found for account '{account_name}'.[/yellow]"
-            )
+            console.print("[yellow]No records found in the database.[/yellow]")
             conn.close()
             return
 
@@ -732,15 +734,14 @@ def report_account():
         end_date = datetime.datetime.fromtimestamp(date_range[1])
     else:
         # Prompt for optional ending month if start_date is given
-        month_str = "Selected months"
         try:
             end_date_input = session.prompt(
-                "Enter ending month (YYYY-MM) (press Enter to use the same as starting month): ",
-                default=start_date.strftime("%Y-%m"),
+                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
+                default=start_date.strftime("%y-%m"),
             )
-            end_date = datetime.datetime.strptime(end_date_input, "%Y-%m")
+            end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
         except ValueError:
-            console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+            console.print("[red]Invalid date format! Please use YY-MM.[/red]")
             conn.close()
             return
         except KeyboardInterrupt:
@@ -753,57 +754,469 @@ def report_account():
             conn.close()
             return
 
-    # Generate report
+    # Generate report grouped by month first
     current_date = start_date
-    console.print(
-        f"\n[bold cyan]{month_str} for {account_name}[/bold cyan]"
-    )  # Use original case account name
     while current_date <= end_date:
         month_start = current_date.replace(day=1)
         next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
         month_end = next_month - datetime.timedelta(seconds=1)
 
-        # Total time for the month
-        cursor.execute(
-            """
-            SELECT SUM(T.timedelta)
-            FROM Times T
-            WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
-            """,
-            (account_id, month_start.timestamp(), month_end.timestamp()),
-        )
-        month_total = cursor.fetchone()[0] or 0
-
+        # Print the month header
         console.print(
-            f"\n[bold][#6699ff]{account_name}[#6699ff] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(month_total)}[/yellow][/bold]"
+            f"\n[bold cyan]Report for {month_start.strftime('%B %Y')}[/bold cyan]"
         )
-        # console.print(f"Total: {format_hours_and_tenths(month_total)}")
 
-        # Timers for the account in this month
-        cursor.execute(
-            """
-            SELECT T.timedelta, T.datetime, T.memo
-            FROM Times T
-            WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
-            ORDER BY T.datetime
-            """,
-            (account_id, month_start.timestamp(), month_end.timestamp()),
-        )
-        timers = cursor.fetchall()
-
-        for timedelta, datetime_val, memo in timers:
-            datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
-                "%d %H:%M"
+        # Fetch data for each matching account
+        for account_id, account_name in matching_accounts:
+            # Total time for the account in this month
+            cursor.execute(
+                """
+                SELECT SUM(T.timedelta)
+                FROM Times T
+                WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+                """,
+                (account_id, month_start.timestamp(), month_end.timestamp()),
             )
-            memo_str = f" ({memo})" if memo else ""
+            account_total = cursor.fetchone()[0] or 0
+
+            if account_total == 0:
+                continue  # Skip accounts with no timers in this month
+
             console.print(
-                f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
+                f"\n[bold][#6699ff]{account_name}[/#6699ff] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
             )
+
+            # Timers for the account in this month
+            cursor.execute(
+                """
+                SELECT T.timedelta, T.datetime, T.memo
+                FROM Times T
+                WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+                ORDER BY T.datetime
+                """,
+                (account_id, month_start.timestamp(), month_end.timestamp()),
+            )
+            timers = cursor.fetchall()
+
+            for timedelta, datetime_val, memo in timers:
+                datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
+                    "%d %H:%M"
+                )
+                memo_str = f" ({memo})" if memo else ""
+                console.print(
+                    f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
+                )
 
         # Move to the next month
         current_date = next_month
 
     conn.close()
+
+
+@click.command()
+@click.option(
+    "--tree", is_flag=True, default=False, help="Display the report as a tree summary."
+)
+def report_account(tree):
+    """
+    Generate a monthly report for accounts matching a specific name or pattern.
+    Prompts for account name (supports fuzzy matching) and optionally for a starting month.
+    If no starting month is provided, generates a report for all months.
+    """
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Fetch account names for fuzzy matching
+    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    accounts = cursor.fetchall()
+
+    account_completions = {
+        account_name.lower(): (account_id, account_name)
+        for account_id, account_name in accounts
+    }
+
+    # Prompt for account using fuzzy autocompletion
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+    session = PromptSession()
+    try:
+        selected_name = session.prompt(
+            "Enter account name (supports fuzzy matching): ",
+            completer=completer,
+            complete_while_typing=True,
+        ).lower()
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Find matching accounts
+    matching_accounts = [
+        (account_id, account_name)
+        for account_name_lower, (
+            account_id,
+            account_name,
+        ) in account_completions.items()
+        if selected_name in account_name_lower
+    ]
+
+    if not matching_accounts:
+        console.print(f"[red]No accounts found matching '{selected_name}'![/red]")
+        conn.close()
+        return
+
+    # Prompt for starting month (optional)
+    try:
+        start_date_input = session.prompt(
+            "Enter starting month (YY-MM) (press Enter to include all months): ",
+            default="",
+        )
+        start_date = (
+            datetime.datetime.strptime(start_date_input, "%y-%m")
+            if start_date_input
+            else None
+        )
+    except ValueError:
+        console.print("[red]Invalid date format! Please use YY-MM.[/red]")
+        conn.close()
+        return
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Generate report for all months if no start_date is provided
+    if not start_date:
+        cursor.execute(
+            """
+            SELECT MIN(datetime), MAX(datetime)
+            FROM Times
+            """
+        )
+        date_range = cursor.fetchone()
+        if not date_range or not date_range[0]:
+            console.print("[yellow]No records found in the database.[/yellow]")
+            conn.close()
+            return
+
+        start_date = datetime.datetime.fromtimestamp(date_range[0])
+        end_date = datetime.datetime.fromtimestamp(date_range[1])
+    else:
+        # Prompt for optional ending month if start_date is given
+        try:
+            end_date_input = session.prompt(
+                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
+                default=start_date.strftime("%y-%m"),
+            )
+            end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
+        except ValueError:
+            console.print("[red]Invalid date format! Please use YY-MM.[/red]")
+            conn.close()
+            return
+        except KeyboardInterrupt:
+            console.print("[red]Cancelled by user.[/red]")
+            conn.close()
+            return
+
+        if end_date < start_date:
+            console.print("[red]Ending month cannot be before starting month![/red]")
+            conn.close()
+            return
+
+    # Generate report grouped by month first
+    current_date = start_date
+    while current_date <= end_date:
+        month_start = current_date.replace(day=1)
+        next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
+        month_end = next_month - datetime.timedelta(seconds=1)
+
+        # Fetch data for each matching account
+        paths = []
+        for account_id, account_name in matching_accounts:
+            # Timers for the account in this month
+            cursor.execute(
+                """
+                SELECT T.timedelta, T.datetime, T.memo
+                FROM Times T
+                WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+                ORDER BY T.datetime
+                """,
+                (account_id, month_start.timestamp(), month_end.timestamp()),
+            )
+            timers = cursor.fetchall()
+
+            for timedelta, datetime_val, memo in timers:
+                datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
+                    "%d %H:%M"
+                )
+                paths.append((account_name, memo or "", timedelta, datetime_val))
+
+        if tree:
+            # Build and display the tree
+            report_title = (
+                f"{month_start.strftime('%B %Y')} accounts matching '{selected_name}'"
+            )
+            click_log(f"for tree using {paths = }")
+            tree = build_tree(report_title, paths)
+            console.print(tree)
+        else:
+            # Display the detailed report
+            console.print(
+                f"\n[bold cyan]{month_start.strftime('%B %Y')} accounts matching '{selected_name}'[/bold cyan]"
+            )
+            for account_id, account_name in matching_accounts:
+                # Total time for the account in this month
+                cursor.execute(
+                    """
+                    SELECT SUM(T.timedelta)
+                    FROM Times T
+                    WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+                    """,
+                    (account_id, month_start.timestamp(), month_end.timestamp()),
+                )
+                account_total = cursor.fetchone()[0] or 0
+
+                if account_total == 0:
+                    continue  # Skip accounts with no timers in this month
+
+                console.print(
+                    f"\n[bold][#6699ff]{account_name}[/#6699ff] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
+                )
+
+                for path in paths:
+                    if path[0] == account_name:
+                        account, memo, timedelta, datetime_val = path
+                        datetime_str = datetime.datetime.fromtimestamp(
+                            datetime_val
+                        ).strftime("%d %H:%M")
+                        memo_str = f" ({memo})" if memo else ""
+                        console.print(
+                            f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
+                        )
+
+        # Move to the next month
+        current_date = next_month
+
+    conn.close()
+
+
+def aggregate_paths(paths):
+    """
+    Aggregate paths for building a tree.
+    """
+    paths.sort()
+    data = {}
+    total = 0
+    for name, _, time, _ in paths:
+        total += time
+        parts = name.split("/")
+        for i in range(len(parts)):
+            key = "/".join(parts[: i + 1])
+            data.setdefault(key, 0)
+            data[key] += time
+    return total, data
+
+
+def build_tree(name, paths):
+    """
+    Build a Rich Tree from a dictionary where keys are paths and values are numbers.
+    """
+    total, data = aggregate_paths(paths)
+
+    root = Tree(
+        f"[bold][blue]{name}[/blue] [yellow]{format_hours_and_tenths(total)}[/yellow][/bold]"
+    )  # Create the root of the tree
+    nodes = {}  # Store nodes to attach children dynamically
+
+    for path, value in data.items():
+        parts = path.split("/")  # Split the path into segments
+        current_node = root
+
+        # Iterate through the segments, creating nodes if necessary
+        for i, part in enumerate(parts):
+            # Construct the full path for the current node
+            full_path = "/".join(parts[: i + 1])
+
+            # Check if the node exists; if not, create it
+            if full_path not in nodes:
+                nodes[full_path] = current_node.add(part)
+
+            # Move to the next node
+            current_node = nodes[full_path]
+
+        # Add the value as a leaf
+        current_node.label = f"[bold][green]{current_node.label}[/green] [yellow]{format_hours_and_tenths(value)}[/yellow][/bold]"
+
+    return root
+
+
+# @click.command()
+# def report_account():
+#     """
+#     Generate a monthly report grouped by month and accounts matching a specific name or pattern.
+#     Prompts for account name (supports fuzzy matching) and optionally for a starting month.
+#     If no starting month is provided, generates a report for all months.
+#     """
+#     conn = setup_database()
+#     cursor = conn.cursor()
+#
+#     # Fetch account names for fuzzy matching
+#     cursor.execute("SELECT account_id, account_name FROM Accounts")
+#     accounts = cursor.fetchall()
+#
+#     account_completions = {
+#         account_name.lower(): (account_id, account_name)
+#         for account_id, account_name in accounts
+#     }
+#
+#     # Prompt for account using fuzzy autocompletion
+#     completer = FuzzyCompleter(
+#         WordCompleter(account_completions.keys(), ignore_case=True)
+#     )
+#     session = PromptSession()
+#     try:
+#         selected_name = session.prompt(
+#             "Enter account name (supports fuzzy matching): ",
+#             completer=completer,
+#             complete_while_typing=True,
+#         ).lower()
+#     except KeyboardInterrupt:
+#         console.print("[red]Cancelled by user.[/red]")
+#         conn.close()
+#         return
+#
+#     # Find matching accounts
+#     matching_accounts = [
+#         (account_id, account_name)
+#         for account_name_lower, (
+#             account_id,
+#             account_name,
+#         ) in account_completions.items()
+#         if selected_name in account_name_lower
+#     ]
+#
+#     if not matching_accounts:
+#         console.print(f"[red]No accounts found matching '{selected_name}'![/red]")
+#         conn.close()
+#         return
+#
+#     # Prompt for starting month (optional)
+#     try:
+#         start_date_input = session.prompt(
+#             "Enter starting month (YY-MM) (press Enter to include all months): ",
+#             default="",
+#         )
+#         start_date = (
+#             datetime.datetime.strptime(start_date_input, "%y-%m")
+#             if start_date_input
+#             else None
+#         )
+#     except ValueError:
+#         console.print("[red]Invalid date format! Please use YY-MM.[/red]")
+#         conn.close()
+#         return
+#     except KeyboardInterrupt:
+#         console.print("[red]Cancelled by user.[/red]")
+#         conn.close()
+#         return
+#
+#     # Generate report for all months if no start_date is provided
+#     if not start_date:
+#         cursor.execute(
+#             """
+#             SELECT MIN(datetime), MAX(datetime)
+#             FROM Times
+#             """
+#         )
+#         date_range = cursor.fetchone()
+#         if not date_range or not date_range[0]:
+#             console.print("[yellow]No records found in the database.[/yellow]")
+#             conn.close()
+#             return
+#
+#         start_date = datetime.datetime.fromtimestamp(date_range[0])
+#         end_date = datetime.datetime.fromtimestamp(date_range[1])
+#     else:
+#         # Prompt for optional ending month if start_date is given
+#         try:
+#             end_date_input = session.prompt(
+#                 "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
+#                 default=start_date.strftime("%y-%m"),
+#             )
+#             end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
+#         except ValueError:
+#             console.print("[red]Invalid date format! Please use YY-MM.[/red]")
+#             conn.close()
+#             return
+#         except KeyboardInterrupt:
+#             console.print("[red]Cancelled by user.[/red]")
+#             conn.close()
+#             return
+#
+#         if end_date < start_date:
+#             console.print("[red]Ending month cannot be before starting month![/red]")
+#             conn.close()
+#             return
+#
+#     # Generate report grouped by month first
+#     current_date = start_date
+#     while current_date <= end_date:
+#         month_start = current_date.replace(day=1)
+#         next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
+#         month_end = next_month - datetime.timedelta(seconds=1)
+#
+#         # Print the month header
+#         console.print(
+#             f"\n[bold cyan]{month_start.strftime('%B %Y')} accounts matching '{selected_name}'[/bold cyan]"
+#         )
+#
+#         # Fetch data for each matching account
+#         for account_id, account_name in matching_accounts:
+#             # Total time for the account in this month
+#             cursor.execute(
+#                 """
+#                 SELECT SUM(T.timedelta)
+#                 FROM Times T
+#                 WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+#                 """,
+#                 (account_id, month_start.timestamp(), month_end.timestamp()),
+#             )
+#             account_total = cursor.fetchone()[0] or 0
+#
+#             if account_total == 0:
+#                 continue  # Skip accounts with no timers in this month
+#
+#             console.print(
+#                 f"\n[bold][#6699ff]{account_name}[/#6699ff] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
+#             )
+#
+#             # Timers for the account in this month
+#             cursor.execute(
+#                 """
+#                 SELECT T.timedelta, T.datetime, T.memo
+#                 FROM Times T
+#                 WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
+#                 ORDER BY T.datetime
+#                 """,
+#                 (account_id, month_start.timestamp(), month_end.timestamp()),
+#             )
+#             timers = cursor.fetchall()
+#
+#             for timedelta, datetime_val, memo in timers:
+#                 datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
+#                     "%d %H:%M"
+#                : )
+#                 memo_str = f" ({memo})" if memo else ""
+#                 console.print(
+#                     f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
+#                 )
+#
+#         # Move to the next month
+#         current_date = next_month
+#
+#     conn.close()
+#
 
 
 @click.command()
