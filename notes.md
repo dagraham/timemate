@@ -1,10 +1,13 @@
 # Forget me nots
 
-## setup.py
+## setup.py and friends
 
 `python setup.py check`
 
 `python setup.py sdist bdist_wheel`
+
+`sqlite3 time_mate.db .dump > backup.sql  # Backup
+sqlite3 time_mate.db < backup.sql       # Restore`
 
 # ToDo
 
