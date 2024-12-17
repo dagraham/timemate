@@ -21,7 +21,7 @@ from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_hom
 from .__version__ import version
 
 AllowedMinutes = Literal[0, 1, 6, 12, 30, 60]
-MINUTES = 6
+MINUTES = 1
 
 console = Console()
 
@@ -51,14 +51,14 @@ def click_log(msg: str):
         )
 
 
-click_log(
-    f"{timemate_home = }; {backup_dir = }; {log_dir =}, {db_path = }; {version = }"
-)
+# click_log(
+#     f"{timemate_home = }; {backup_dir = }; {log_dir =}, {db_path = }; {version = }"
+# )
 
 
 # Other imports and functions remain unchanged...
 @click.command()
-def archive_timers():
+def timer_archive():
     """
     Archive timers by setting the status to 'inactive' for all timers with start times before today.
     """
@@ -99,7 +99,7 @@ def cli():
 
 @click.command()
 @click.argument("account_name")
-def add_account(account_name):
+def account_add(account_name):
     """Add a new account."""
     conn = setup_database()
     cursor = conn.cursor()
@@ -123,7 +123,7 @@ def format_hours_and_tenths(total_seconds: int, round_up: AllowedMinutes = MINUT
     """
     if round_up <= 1:
         # hours, minutes and seconds if not rounded up
-        return format_hours_minutes_seconds(total_seconds)
+        return format_hours_minutes(total_seconds)
     seconds = total_seconds
     minutes = seconds // 60
     if seconds % 60:
@@ -139,7 +139,7 @@ def format_dt(seconds: int):
     return dt.strftime("%y-%m-%d %H:%M")
 
 
-def format_hours_minutes_seconds(total_seconds: int) -> str:
+def format_hours_minutes(total_seconds: int) -> str:
     until = []
     hours = minutes = seconds = 0
     if total_seconds:
@@ -149,20 +149,25 @@ def format_hours_minutes_seconds(total_seconds: int) -> str:
             seconds = seconds % 60
             if seconds >= 30:
                 minutes += 1
+            seconds = 0
         if minutes >= 60:
             hours = minutes // 60
             minutes = minutes % 60
-    else:
-        seconds = 0
-    if hours:
-        until.append(f"{hours}h")
-    if minutes:
-        until.append(f"{minutes}m")
-    if seconds:
-        until.append(f"{seconds}s")
-    if not until:
-        until.append("0m")
-    return f"{''.join(until)}"
+    # else:
+    #     seconds = 0
+    # if hours:
+    #     until.append(f"{hours}:")
+    # else:
+    #     until.append("0:")
+    # if minutes:
+    #     until.append(f"{minutes:>02}")
+    # else:
+    #     until.append("00")
+    # if seconds:
+    #     until.append(f"{seconds}s")
+    # if not until:
+    #     until.append("0m")
+    return f"{hours}:{minutes:>02}"
 
 
 def setup_database():
@@ -191,10 +196,10 @@ def setup_database():
 @click.command()
 def list_accounts():
     """List all accounts."""
-    _list_accounts()
+    _accounts_list()
 
 
-def _list_accounts():
+def _accounts_list():
     conn = setup_database()
     cursor = conn.cursor()
     cursor.execute("SELECT account_id, account_name FROM Accounts")
@@ -209,7 +214,7 @@ def _list_accounts():
 
 
 @click.command()
-def add_timer():
+def timer_add():
     """
     Add a timer. Use fuzzy autocompletion to select or create an account,
     then optionally add a memo to describe the time spent.
@@ -270,6 +275,141 @@ def add_timer():
     conn.commit()
     console.print("[green]Timer added successfully![/green]")
     conn.close()
+
+
+@click.command()
+@click.argument("position", type=int)
+def timer_update(position):
+    """
+    Update fields (account, memo, timedelta) for a specific timer interactively.
+    Existing values are shown as defaults.
+    """
+    time_id = pos_to_id.get(position)
+    click_log(f"got {time_id = } from {position = }")
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Fetch the current timer record
+    cursor.execute(
+        """
+        SELECT T.account_id, A.account_name, T.memo, T.timedelta, T.datetime
+        FROM Times T
+        JOIN Accounts A ON T.account_id = A.account_id
+        WHERE T.time_id = ?
+        """,
+        (time_id,),
+    )
+    timer = cursor.fetchone()
+
+    if not timer:
+        console.print(f"[red]Timer ID {timer_id} not found![/red]")
+        conn.close()
+        return
+
+    account_id, current_account, current_memo, current_timedelta, current_datetime = (
+        timer
+    )
+
+    # Format current datetime for display
+    current_datetime_str = (
+        datetime.datetime.fromtimestamp(current_datetime).strftime("%y-%m-%d %H:%M")
+        if current_datetime
+        else ""
+    )
+
+    # Fetch all accounts for fuzzy completion
+    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    accounts = cursor.fetchall()
+    account_completions = {
+        account_name.lower(): (account_id, account_name)
+        for account_id, account_name in accounts
+    }
+
+    # PromptSession setup
+    session = PromptSession()
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+
+    # Prompt for new account name with fuzzy completion
+    try:
+        new_account_name = session.prompt(
+            f"Enter account name [{current_account}]: ",
+            completer=completer,
+            complete_while_typing=True,
+            default=current_account,
+        ).lower()
+    except KeyboardInterrupt:
+        console.print("[red]Operation cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Resolve account ID (use the current one if unchanged)
+    if new_account_name == current_account.lower():
+        new_account_id = account_id
+    else:
+        resolved_account = account_completions.get(new_account_name)
+        if not resolved_account:
+            console.print(f"[red]Account '{new_account_name}' not found![/red]")
+            conn.close()
+            return
+        new_account_id = resolved_account[0]
+
+    # Prompt for memo
+    try:
+        new_memo = session.prompt(
+            f"Enter memo [{current_memo or ''}]: ", default=current_memo or ""
+        )
+    except KeyboardInterrupt:
+        console.print("[red]Operation cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Prompt for timedelta
+    try:
+        new_timedelta = session.prompt(
+            f"Enter timedelta (seconds) [{current_timedelta}]: ",
+            default=str(current_timedelta),
+        )
+        new_timedelta = int(new_timedelta)
+    except (ValueError, KeyboardInterrupt):
+        console.print("[red]Invalid input or operation cancelled.[/red]")
+        conn.close()
+        return
+
+    # Prompt for datetime
+    try:
+        new_datetime_input = session.prompt(
+            f"Enter datetime (YY-MM-DD HH:MM) [{current_datetime_str}]: ",
+            default=current_datetime_str,
+        )
+        new_datetime = (
+            round(
+                datetime.datetime.strptime(
+                    new_datetime_input, "%y-%m-%d %H:%M"
+                ).timestamp()
+            )
+            if new_datetime_input.strip()
+            else current_datetime
+        )
+    except (ValueError, KeyboardInterrupt):
+        console.print("[red]Invalid datetime format or operation cancelled.[/red]")
+        conn.close()
+        return
+
+    # Update the timer record
+    cursor.execute(
+        """
+        UPDATE Times
+        SET account_id = ?, memo = ?, timedelta = ?, datetime = ?
+        WHERE time_id = ?
+        """,
+        (new_account_id, new_memo, new_timedelta, new_datetime, time_id),
+    )
+    conn.commit()
+    conn.close()
+
+    console.print(f"[green]Timer {position} updated successfully![/green]")
 
 
 @cli.command(short_help="Shows info for TimeMate")
@@ -490,7 +630,7 @@ def timer_pause(position):
 @click.argument("report_date", type=click.DateTime(formats=["%y-%m-%d"]))
 def report_week(report_date):
     """
-    Generate a weekly report for the week containing REPORT_DATE (format: YYYY-MM-DD).
+    Generate a weekly report for the week containing REPORT_DATE (format: YY-MM-DD).
     """
     conn = setup_database()
     cursor = conn.cursor()
@@ -553,7 +693,8 @@ def report_week(report_date):
             )
             memo_str = f" ({memo})" if memo else ""
             console.print(
-                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str} [#6699ff]{account_name}[/#6699ff] "
+                # f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str} [#6699ff]{account_name}[/#6699ff] "
+                f"    [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green] [#6699ff]{account_name}[/#6699ff]{memo_str}"
             )
 
     conn.close()
@@ -563,18 +704,17 @@ def report_week(report_date):
 def report_month():
     """
     Generate a monthly report for the month containing a specified date.
-    Prompts for the month in YYYY-MM format.
+    Prompts for the month in YY-MM format.
     """
     conn = setup_database()
     cursor = conn.cursor()
 
-    # Prompt for month (YYYY-MM format)
     session = PromptSession()
     try:
-        month_input = session.prompt("Enter the month for the report (YYYY-MM): ")
+        month_input = session.prompt("Enter the month for the report (YY-MM): ")
         report_date = datetime.datetime.strptime(month_input, "%y-%m")
     except ValueError:
-        console.print("[red]Invalid date format! Please use YYYY-MM.[/red]")
+        console.print("[red]Invalid date format! Please use YY-MM.[/red]")
         conn.close()
         return
     except KeyboardInterrupt:
@@ -647,173 +787,6 @@ def report_month():
 
 
 @click.command()
-def report_account():
-    """
-    Generate a monthly report grouped by month and accounts matching a specific name or pattern.
-    Prompts for account name (supports fuzzy matching) and optionally for a starting month.
-    If no starting month is provided, generates a report for all months.
-    """
-    conn = setup_database()
-    cursor = conn.cursor()
-
-    # Fetch account names for fuzzy matching
-    cursor.execute("SELECT account_id, account_name FROM Accounts")
-    accounts = cursor.fetchall()
-
-    account_completions = {
-        account_name.lower(): (account_id, account_name)
-        for account_id, account_name in accounts
-    }
-
-    # Prompt for account using fuzzy autocompletion
-    completer = FuzzyCompleter(
-        WordCompleter(account_completions.keys(), ignore_case=True)
-    )
-    session = PromptSession()
-    try:
-        selected_name = session.prompt(
-            "Enter account name (supports fuzzy matching): ",
-            completer=completer,
-            complete_while_typing=True,
-        ).lower()
-    except KeyboardInterrupt:
-        console.print("[red]Cancelled by user.[/red]")
-        conn.close()
-        return
-
-    # Find matching accounts
-    matching_accounts = [
-        (account_id, account_name)
-        for account_name_lower, (
-            account_id,
-            account_name,
-        ) in account_completions.items()
-        if selected_name in account_name_lower
-    ]
-
-    if not matching_accounts:
-        console.print(f"[red]No accounts found matching '{selected_name}'![/red]")
-        conn.close()
-        return
-
-    # Prompt for starting month (optional)
-    try:
-        start_date_input = session.prompt(
-            "Enter starting month (YY-MM) (press Enter to include all months): ",
-            default="",
-        )
-        start_date = (
-            datetime.datetime.strptime(start_date_input, "%y-%m")
-            if start_date_input
-            else None
-        )
-    except ValueError:
-        console.print("[red]Invalid date format! Please use YY-MM.[/red]")
-        conn.close()
-        return
-    except KeyboardInterrupt:
-        console.print("[red]Cancelled by user.[/red]")
-        conn.close()
-        return
-
-    # Generate report for all months if no start_date is provided
-    if not start_date:
-        cursor.execute(
-            """
-            SELECT MIN(datetime), MAX(datetime)
-            FROM Times
-            """
-        )
-        date_range = cursor.fetchone()
-        if not date_range or not date_range[0]:
-            console.print("[yellow]No records found in the database.[/yellow]")
-            conn.close()
-            return
-
-        start_date = datetime.datetime.fromtimestamp(date_range[0])
-        end_date = datetime.datetime.fromtimestamp(date_range[1])
-    else:
-        # Prompt for optional ending month if start_date is given
-        try:
-            end_date_input = session.prompt(
-                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
-                default=start_date.strftime("%y-%m"),
-            )
-            end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
-        except ValueError:
-            console.print("[red]Invalid date format! Please use YY-MM.[/red]")
-            conn.close()
-            return
-        except KeyboardInterrupt:
-            console.print("[red]Cancelled by user.[/red]")
-            conn.close()
-            return
-
-        if end_date < start_date:
-            console.print("[red]Ending month cannot be before starting month![/red]")
-            conn.close()
-            return
-
-    # Generate report grouped by month first
-    current_date = start_date
-    while current_date <= end_date:
-        month_start = current_date.replace(day=1)
-        next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
-        month_end = next_month - datetime.timedelta(seconds=1)
-
-        # Print the month header
-        console.print(
-            f"\n[bold cyan]Report for {month_start.strftime('%B %Y')}[/bold cyan]"
-        )
-
-        # Fetch data for each matching account
-        for account_id, account_name in matching_accounts:
-            # Total time for the account in this month
-            cursor.execute(
-                """
-                SELECT SUM(T.timedelta)
-                FROM Times T
-                WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
-                """,
-                (account_id, month_start.timestamp(), month_end.timestamp()),
-            )
-            account_total = cursor.fetchone()[0] or 0
-
-            if account_total == 0:
-                continue  # Skip accounts with no timers in this month
-
-            console.print(
-                f"\n[bold][#6699ff]{account_name}[/#6699ff] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
-            )
-
-            # Timers for the account in this month
-            cursor.execute(
-                """
-                SELECT T.timedelta, T.datetime, T.memo
-                FROM Times T
-                WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
-                ORDER BY T.datetime
-                """,
-                (account_id, month_start.timestamp(), month_end.timestamp()),
-            )
-            timers = cursor.fetchall()
-
-            for timedelta, datetime_val, memo in timers:
-                datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
-                    "%d %H:%M"
-                )
-                memo_str = f" ({memo})" if memo else ""
-                console.print(
-                    f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
-                )
-
-        # Move to the next month
-        current_date = next_month
-
-    conn.close()
-
-
-@click.command()
 @click.option(
     "--tree", is_flag=True, default=False, help="Display the report as a tree summary."
 )
@@ -866,6 +839,14 @@ def report_account(tree):
         conn.close()
         return
 
+    if selected_name:
+        ACCOUNTS = (
+            f"accounts matching '{selected_name}'"
+            if len(matching_accounts) > 1
+            else f"{matching_accounts[0][1]}"
+        )
+    else:
+        ACCOUNTS = "all accounts"
     # Prompt for starting month (optional)
     try:
         start_date_input = session.prompt(
@@ -926,6 +907,7 @@ def report_account(tree):
 
     # Generate report grouped by month first
     current_date = start_date
+    total = 0
     while current_date <= end_date:
         month_start = current_date.replace(day=1)
         next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
@@ -950,20 +932,19 @@ def report_account(tree):
                 datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
                     "%d %H:%M"
                 )
+                total += timedelta
                 paths.append((account_name, memo or "", timedelta, datetime_val))
 
         if tree:
             # Build and display the tree
-            report_title = (
-                f"{month_start.strftime('%B %Y')} accounts matching '{selected_name}'"
-            )
+            report_title = f"{month_start.strftime('%B %Y')} times for {ACCOUNTS}"
             click_log(f"for tree using {paths = }")
             tree = build_tree(report_title, paths)
             console.print(tree)
         else:
             # Display the detailed report
             console.print(
-                f"\n[bold cyan]{month_start.strftime('%B %Y')} accounts matching '{selected_name}'[/bold cyan]"
+                f"\n[bold cyan]{month_start.strftime('%B %Y')} times for {ACCOUNTS}[/bold cyan]"
             )
             for account_id, account_name in matching_accounts:
                 # Total time for the account in this month
@@ -1009,6 +990,8 @@ def aggregate_paths(paths):
     data = {}
     total = 0
     for name, _, time, _ in paths:
+        if time == 0:
+            continue
         total += time
         parts = name.split("/")
         for i in range(len(parts)):
@@ -1049,174 +1032,6 @@ def build_tree(name, paths):
         current_node.label = f"[bold][green]{current_node.label}[/green] [yellow]{format_hours_and_tenths(value)}[/yellow][/bold]"
 
     return root
-
-
-# @click.command()
-# def report_account():
-#     """
-#     Generate a monthly report grouped by month and accounts matching a specific name or pattern.
-#     Prompts for account name (supports fuzzy matching) and optionally for a starting month.
-#     If no starting month is provided, generates a report for all months.
-#     """
-#     conn = setup_database()
-#     cursor = conn.cursor()
-#
-#     # Fetch account names for fuzzy matching
-#     cursor.execute("SELECT account_id, account_name FROM Accounts")
-#     accounts = cursor.fetchall()
-#
-#     account_completions = {
-#         account_name.lower(): (account_id, account_name)
-#         for account_id, account_name in accounts
-#     }
-#
-#     # Prompt for account using fuzzy autocompletion
-#     completer = FuzzyCompleter(
-#         WordCompleter(account_completions.keys(), ignore_case=True)
-#     )
-#     session = PromptSession()
-#     try:
-#         selected_name = session.prompt(
-#             "Enter account name (supports fuzzy matching): ",
-#             completer=completer,
-#             complete_while_typing=True,
-#         ).lower()
-#     except KeyboardInterrupt:
-#         console.print("[red]Cancelled by user.[/red]")
-#         conn.close()
-#         return
-#
-#     # Find matching accounts
-#     matching_accounts = [
-#         (account_id, account_name)
-#         for account_name_lower, (
-#             account_id,
-#             account_name,
-#         ) in account_completions.items()
-#         if selected_name in account_name_lower
-#     ]
-#
-#     if not matching_accounts:
-#         console.print(f"[red]No accounts found matching '{selected_name}'![/red]")
-#         conn.close()
-#         return
-#
-#     # Prompt for starting month (optional)
-#     try:
-#         start_date_input = session.prompt(
-#             "Enter starting month (YY-MM) (press Enter to include all months): ",
-#             default="",
-#         )
-#         start_date = (
-#             datetime.datetime.strptime(start_date_input, "%y-%m")
-#             if start_date_input
-#             else None
-#         )
-#     except ValueError:
-#         console.print("[red]Invalid date format! Please use YY-MM.[/red]")
-#         conn.close()
-#         return
-#     except KeyboardInterrupt:
-#         console.print("[red]Cancelled by user.[/red]")
-#         conn.close()
-#         return
-#
-#     # Generate report for all months if no start_date is provided
-#     if not start_date:
-#         cursor.execute(
-#             """
-#             SELECT MIN(datetime), MAX(datetime)
-#             FROM Times
-#             """
-#         )
-#         date_range = cursor.fetchone()
-#         if not date_range or not date_range[0]:
-#             console.print("[yellow]No records found in the database.[/yellow]")
-#             conn.close()
-#             return
-#
-#         start_date = datetime.datetime.fromtimestamp(date_range[0])
-#         end_date = datetime.datetime.fromtimestamp(date_range[1])
-#     else:
-#         # Prompt for optional ending month if start_date is given
-#         try:
-#             end_date_input = session.prompt(
-#                 "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
-#                 default=start_date.strftime("%y-%m"),
-#             )
-#             end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
-#         except ValueError:
-#             console.print("[red]Invalid date format! Please use YY-MM.[/red]")
-#             conn.close()
-#             return
-#         except KeyboardInterrupt:
-#             console.print("[red]Cancelled by user.[/red]")
-#             conn.close()
-#             return
-#
-#         if end_date < start_date:
-#             console.print("[red]Ending month cannot be before starting month![/red]")
-#             conn.close()
-#             return
-#
-#     # Generate report grouped by month first
-#     current_date = start_date
-#     while current_date <= end_date:
-#         month_start = current_date.replace(day=1)
-#         next_month = (month_start + datetime.timedelta(days=32)).replace(day=1)
-#         month_end = next_month - datetime.timedelta(seconds=1)
-#
-#         # Print the month header
-#         console.print(
-#             f"\n[bold cyan]{month_start.strftime('%B %Y')} accounts matching '{selected_name}'[/bold cyan]"
-#         )
-#
-#         # Fetch data for each matching account
-#         for account_id, account_name in matching_accounts:
-#             # Total time for the account in this month
-#             cursor.execute(
-#                 """
-#                 SELECT SUM(T.timedelta)
-#                 FROM Times T
-#                 WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
-#                 """,
-#                 (account_id, month_start.timestamp(), month_end.timestamp()),
-#             )
-#             account_total = cursor.fetchone()[0] or 0
-#
-#             if account_total == 0:
-#                 continue  # Skip accounts with no timers in this month
-#
-#             console.print(
-#                 f"\n[bold][#6699ff]{account_name}[/#6699ff] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
-#             )
-#
-#             # Timers for the account in this month
-#             cursor.execute(
-#                 """
-#                 SELECT T.timedelta, T.datetime, T.memo
-#                 FROM Times T
-#                 WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
-#                 ORDER BY T.datetime
-#                 """,
-#                 (account_id, month_start.timestamp(), month_end.timestamp()),
-#             )
-#             timers = cursor.fetchall()
-#
-#             for timedelta, datetime_val, memo in timers:
-#                 datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
-#                     "%d %H:%M"
-#                : )
-#                 memo_str = f" ({memo})" if memo else ""
-#                 console.print(
-#                     f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
-#                 )
-#
-#         # Move to the next month
-#         current_date = next_month
-#
-#     conn.close()
-#
 
 
 @click.command()
@@ -1364,19 +1179,204 @@ def update_tmp_home(tmp_home: str = ""):
         console.print(f"[yellow]Temporary home directory not in use[/yellow]")
 
 
-cli.add_command(add_account)
+@click.command()
+@click.argument("position", type=int)
+@click.option("--confirm", is_flag=True, help="Skip confirmation prompt.")
+def timer_delete(position, confirm):
+    """
+    Delete a specific timer record by position.
+    """
+    time_id = pos_to_id.get(position)
+    click_log(f"got {time_id = } from {position = }")
+
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    if not confirm:
+        console.print("[yellow]This action cannot be undone.[/yellow]")
+        confirm = click.confirm("Are you sure you want to delete this timer?")
+
+    if confirm:
+        cursor.execute("DELETE FROM Times WHERE time_id = ?", (timer_id,))
+        conn.commit()
+        console.print(f"[green]Timer {timer_id} deleted successfully![/green]")
+    else:
+        console.print("[blue]Delete operation cancelled.[/blue]")
+
+    conn.close()
+
+
+@click.command()
+def account_merge():
+    """
+    Merge one account into another, transferring all timers and deleting the source account.
+    """
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Fetch account names for autocompletion
+    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    accounts = cursor.fetchall()
+
+    if len(accounts) < 2:
+        console.print(
+            "[yellow]At least two accounts are required to perform a merge.[/yellow]"
+        )
+        conn.close()
+        return
+
+    # Build account completions
+    account_completions = {
+        account_name.lower(): (account_id, account_name)
+        for account_id, account_name in accounts
+    }
+
+    # Prompt for source account
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+    session = PromptSession()
+
+    try:
+        source_name = session.prompt(
+            "Enter source account name (to be merged): ",
+            completer=completer,
+            complete_while_typing=True,
+        ).lower()
+        target_name = session.prompt(
+            "Enter target account name (to merge into): ",
+            completer=completer,
+            complete_while_typing=True,
+        ).lower()
+    except KeyboardInterrupt:
+        console.print("[red]Operation cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Resolve accounts
+    source_account = account_completions.get(source_name)
+    target_account = account_completions.get(target_name)
+
+    if not source_account:
+        console.print(f"[red]Source account '{source_name}' not found![/red]")
+        conn.close()
+        return
+    if not target_account:
+        console.print(f"[red]Target account '{target_name}' not found![/red]")
+        conn.close()
+        return
+    if source_account[0] == target_account[0]:
+        console.print("[red]Source and target accounts must be different![/red]")
+        conn.close()
+        return
+
+    # Merge confirmation
+    console.print(
+        f"[yellow]All timers from '{source_account[1]}' will be transferred to '{target_account[1]}'.[/yellow]"
+    )
+    if not click.confirm("Are you sure you want to proceed?"):
+        console.print("[blue]Merge operation cancelled.[/blue]")
+        conn.close()
+        return
+
+    # Update timers and delete the source account
+    cursor.execute(
+        "UPDATE Times SET account_id = ? WHERE account_id = ?",
+        (target_account[0], source_account[0]),
+    )
+    cursor.execute("DELETE FROM Accounts WHERE account_id = ?", (source_account[0],))
+    conn.commit()
+
+    console.print(
+        f"[green]Account '{source_account[1]}' merged into '{target_account[1]}' successfully![/green]"
+    )
+    conn.close()
+
+
+@click.command()
+def account_delete():
+    """
+    Delete an account and all related timer records.
+    """
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Fetch account names for autocompletion
+    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    accounts = cursor.fetchall()
+
+    if not accounts:
+        console.print("[yellow]No accounts found to delete![/yellow]")
+        conn.close()
+        return
+
+    # Build account completions
+    account_completions = {
+        account_name.lower(): (account_id, account_name)
+        for account_id, account_name in accounts
+    }
+
+    # Prompt for account name using fuzzy completion
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+    session = PromptSession()
+    try:
+        selected_name = session.prompt(
+            "Enter account name to delete: ",
+            completer=completer,
+            complete_while_typing=True,
+        ).lower()
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Resolve account
+    account = account_completions.get(selected_name)
+    if not account:
+        console.print(f"[red]Account '{selected_name}' not found![/red]")
+        conn.close()
+        return
+
+    account_id, account_name = account
+
+    # Confirmation prompt
+    console.print(
+        f"[yellow]Warning: This will delete the account '{account_name}' and all related timers.[/yellow]"
+    )
+    if not click.confirm("Are you sure you want to proceed?"):
+        console.print("[blue]Delete operation cancelled.[/blue]")
+        conn.close()
+        return
+
+    # Delete related timers and the account
+    cursor.execute("DELETE FROM Times WHERE account_id = ?", (account_id,))
+    cursor.execute("DELETE FROM Accounts WHERE account_id = ?", (account_id,))
+    conn.commit()
+    console.print(
+        f"[green]Account '{account_name}' and all related timers deleted successfully![/green]"
+    )
+    conn.close()
+
+
+cli.add_command(account_add)
+cli.add_command(account_delete)
+cli.add_command(account_merge)
 cli.add_command(list_accounts)
-cli.add_command(add_timer)
 cli.add_command(list_timers)
-cli.add_command(timer_start)
-cli.add_command(timer_pause)
+cli.add_command(populate)
 cli.add_command(report_account)
 cli.add_command(report_month)
 cli.add_command(report_week)
 cli.add_command(set_home)
 cli.add_command(settings)
-cli.add_command(populate)
-cli.add_command(archive_timers)  # New archive_timers command
+cli.add_command(timer_add)
+cli.add_command(timer_archive)
+cli.add_command(timer_delete)
+cli.add_command(timer_pause)
+cli.add_command(timer_start)
+cli.add_command(timer_update)
 
 
 def main():
