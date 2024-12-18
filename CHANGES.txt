@@ -1,29 +1,33 @@
-Recent tagged changes as of 2024-12-18 12:49:10.578160:
-- 0 seconds ago (HEAD -> working, tag: 0.0.9) Daniel Graham
+Recent tagged changes as of 2024-12-18 16:29:50.508477:
+- 0 seconds ago (HEAD -> working, tag: 0.0.10) Daniel Graham
+    8c19e38 2024-12-18 16:29:50 -0500
+    Tagged version 0.0.10. README tweaks with images
+
+- 4 hours ago (tag: 0.0.9) Daniel Graham
     736facc 2024-12-18 12:49:10 -0500
     Tagged version 0.0.9. Shortcuts
 
-- 82 minutes ago (tag: 0.0.8) Daniel Graham
+- 5 hours ago (tag: 0.0.8) Daniel Graham
     edfb11d 2024-12-18 11:27:20 -0500
     Tagged version 0.0.8.
 
-- 83 minutes ago (tag: 0.0.7) Daniel Graham
+- 5 hours ago (tag: 0.0.7) Daniel Graham
     60e43be 2024-12-18 11:26:31 -0500
     Tagged version 0.0.7. bump.py and upload_sdist tweaks
 
-- 2 hours ago (tag: 0.0.6) Daniel Graham
+- 5 hours ago (tag: 0.0.6) Daniel Graham
     a68ba30 2024-12-18 11:13:47 -0500
     Tagged version 0.0.6.
 
-- 16 hours ago (tag: 0.0.5) Daniel Graham
+- 20 hours ago (tag: 0.0.5) Daniel Graham
     b533dc9 2024-12-17 20:39:45 -0500
     Tagged version 0.0.5.
 
-- 21 hours ago (tag: 0.0.4) Daniel Graham
+- 25 hours ago (tag: 0.0.4) Daniel Graham
     4a0e95e 2024-12-17 15:21:38 -0500
     Tagged version 0.0.4.
 
-- 22 hours ago (tag: 0.0.3) Daniel Graham
+- 26 hours ago (tag: 0.0.3) Daniel Graham
     ee202ca 2024-12-17 14:52:52 -0500
     Tagged version 0.0.3.
 
@@ -74,7 +78,3 @@ Recent tagged changes as of 2024-12-18 12:49:10.578160:
 - 8 days ago (tag: 0.0.0a3) Daniel Graham
     a2c92f3 2024-12-10 15:05:16 -0500
     Tagged version 0.0.0a3.
-
-- 9 days ago (tag: 0.0.0a2) Daniel Graham
-    963753d 2024-12-09 15:56:42 -0500
-    Tagged version 0.0.0a2.

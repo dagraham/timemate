@@ -58,10 +58,10 @@ def click_log(msg: str):
 
 
 # Other imports and functions remain unchanged...
-@click.command()
+@click.command(short_help="Archive timers dated before today")
 def timer_archive():
     """
-    Archive timers by setting the status to 'inactive' for all timers with start times before today.
+    Archive timers by setting the status to 'inactive' for all timers with start times before today. Such timers will not be displayed by list-timers unless the flag '--all' is appended.
     """
     conn = setup_database()
     cursor = conn.cursor()
@@ -91,7 +91,7 @@ def timer_archive():
     intro="Welcome to the TimeMate shell! Type ? or help for commands.",
 )
 def cli():
-    """Time Mate: A CLI Timer Manager.
+    """TimeMate: record and report times spent in various activities"
 
     Started without any options, open a TimeMate shell.
     """
@@ -116,23 +116,6 @@ def account_add(account_name):
     except sqlite3.IntegrityError:
         console.print(f"[red]Account '{account_name}' already exists![/red]")
     conn.close()
-
-
-# def format_hours_and_tenths(total_seconds: int, round_up: AllowedMinutes = 1):
-#     """
-#     Convert seconds into hours and tenths of an hour rounding up to the nearest AllowedMinutes.
-#     """
-#     if round_up <= 1:
-#         # hours, minutes and seconds if not rounded up
-#         return format_hours_minutes(total_seconds)
-#     seconds = total_seconds
-#     minutes = seconds // 60
-#     if seconds % 60:
-#         minutes += 1
-#     if minutes:
-#         return f"{math.ceil(minutes/round_up)/(60/round_up)}h"
-#     else:
-#         return "0.0h"
 
 
 def format_hours_and_tenths(total_seconds: int):
@@ -281,11 +264,11 @@ def create_triggers(conn):
     conn.commit()
 
 
-@click.command()
+@click.command(short_help="Set the round-up value for report times")
 @click.argument("new_minutes", type=click.Choice(["1", "6", "12", "30", "60"]))
 def set_minutes(new_minutes):
     """
-    Update the MINUTES setting from [1, 6, 12, 30, 60] for the user. With 1, elapsed times in reports are rounded up to the next minute, with 6 they are rounded up to the next 6/60 = 1/10 of an hour, with 12 to the next 12/60 = 2/10 of an hour and so forth.
+    Update the MINUTES setting from [1, 6, 12, 30, 60]. With 1, elapsed times in reports are rounded up to the next minute, with 6 they are rounded up to the next 6/60 = 1/10 of an hour, with 12 to the next 12/60 = 2/10 of an hour and so forth.
     """
     conn = setup_database()
     cursor = conn.cursor()
@@ -333,7 +316,7 @@ def _accounts_list():
     conn.close()
 
 
-@click.command()
+@click.command(short_help="add a new timer")
 def timer_add():
     """
     Add a timer. Use fuzzy autocompletion to select or create an account,
@@ -397,22 +380,22 @@ def timer_add():
     conn.close()
 
 
-@click.command()
-@click.argument("shortcut", nargs=-1)
-def ta(shortcut):
+@click.command(short_help="shortcut for timer-add")
+@click.argument("arguments", nargs=-1)
+def ta(arguments):
     """
-    Shortcut for adding a timer using the account id and, optionally, the entry for the memo.
+    Shortcut for adding a timer using arguments <account id> and [memo]
 
     Example:
-        add 27 "some writing"
+        ta 27 some writing
     """
-    if len(shortcut) < 1:
+    if len(arguments) < 1:
         console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
         return
 
     try:
-        account_id = int(shortcut[0])  # First part is the account_id
-        memo = " ".join(shortcut[1:])  # The rest is the memo
+        account_id = int(arguments[0])  # First part is the account_id
+        memo = " ".join(arguments[1:])  # The rest is the memo
     except ValueError:
         console.print("[red]Invalid account_id. Must be an integer.[/red]")
         return
@@ -815,7 +798,7 @@ def timer_pause(position):
     _list_timers()
 
 
-@click.command()
+@click.command(short_help="Generate a weekly report")
 @click.argument("report_date", type=click.DateTime(formats=["%y-%m-%d"]))
 def report_week(report_date):
     """
@@ -834,13 +817,14 @@ def report_week(report_date):
         SELECT SUM(T.timedelta)
         FROM Times T
         WHERE T.datetime BETWEEN ? AND ?
+        ORDER BY T.datetime
         """,
         (week_start.timestamp(), week_end.timestamp()),
     )
     week_total = cursor.fetchone()[0] or 0
 
     console.print(
-        f"\n[bold cyan]Weekly Report[/bold cyan] ({week_start.date()} to {week_end.date()}):"
+        f"[bold cyan]Weekly Report[/bold cyan] ({week_start.date()} to {week_end.date()}):"
     )
     console.print(f"Total Time: [yellow]{format_hours_and_tenths(week_total)}[/yellow]")
 
@@ -852,6 +836,7 @@ def report_week(report_date):
             SELECT SUM(T.timedelta)
             FROM Times T
             WHERE T.datetime BETWEEN ? AND ?
+            ORDER BY T.datetime
             """,
             (day.timestamp(), (day + datetime.timedelta(days=1)).timestamp()),
         )
@@ -869,7 +854,7 @@ def report_week(report_date):
             FROM Times T
             JOIN Accounts A ON T.account_id = A.account_id
             WHERE T.datetime BETWEEN ? AND ?
-            ORDER BY A.account_name, T.datetime
+            ORDER BY T.datetime
             """,
             (day.timestamp(), (day + datetime.timedelta(days=1)).timestamp()),
         )
@@ -888,7 +873,7 @@ def report_week(report_date):
     conn.close()
 
 
-@click.command()
+@click.command(short_help="Generate a monthly report")
 def report_month():
     """
     Generate a monthly report for the month containing a specified date.
@@ -974,7 +959,7 @@ def report_month():
     conn.close()
 
 
-@click.command()
+@click.command(short_help="Generate a report for account(s)")
 @click.option(
     "--tree", is_flag=True, default=False, help="Display the report as a tree summary."
 )
@@ -1224,7 +1209,7 @@ def build_tree(name, paths):
     return root
 
 
-@click.command()
+@click.command(short_help="Populate the database with JSON or YAML records")
 @click.option(
     "-f",
     "--file",
@@ -1239,7 +1224,7 @@ def build_tree(name, paths):
 )
 def populate(file, format):
     """
-    Populate the Accounts and Times tables with test data.
+    Populate the Accounts and Times tables with data from a specified JSON or YAML file.
     """
     conn = setup_database()
     cursor = conn.cursor()
@@ -1305,7 +1290,7 @@ def populate(file, format):
     console.print("[green]Database populated successfully![/green]")
 
 
-@cli.command("set-home")
+@cli.command("set-home", short_help="Set or clear a temporary home directory for TimeMate")
 @click.argument("home", required=False)  # Optional argument for the home directory
 def set_home(home):
     """
@@ -1367,12 +1352,12 @@ def update_tmp_home(tmp_home: str = ""):
         console.print(f"[yellow]Temporary home directory not in use[/yellow]")
 
 
-@click.command()
+@click.command(short_help="Delete the timer at POSITION")
 @click.argument("position", type=int)
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt.")
 def timer_delete(position, confirm):
     """
-    Delete a specific timer record by position.
+    Delete the timer record at POSITION in list-timers.
     """
     time_id = pos_to_id.get(position)
     click_log(f"got {time_id = } from {position = }")
@@ -1394,7 +1379,7 @@ def timer_delete(position, confirm):
     conn.close()
 
 
-@click.command()
+@click.command(short_help="Merge one account into another")
 def account_merge():
     """
     Merge one account into another, transferring all timers and deleting the source account.
@@ -1481,7 +1466,7 @@ def account_merge():
     conn.close()
 
 
-@click.command()
+@click.command(short_help="Delete an account and all related times records")
 def account_delete():
     """
     Delete an account and all related timer records.
@@ -1575,7 +1560,7 @@ def main():
     MINUTES = get_minutes_setting(conn)  # Load MINUTES from the database
     click_log(f"got {MINUTES = }")
     console.clear()
-    _info()
+    # _info()
     cli()
 
 
