@@ -17,7 +17,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
+from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
+               timemate_home)
 from .__version__ import version
 
 AllowedMinutes = Literal[0, 1, 6, 12, 30, 60]
