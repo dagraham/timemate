@@ -5,20 +5,22 @@ from setuptools import find_packages, setup
 
 from modules.__version__ import version
 
-DESCRIPTION = ("A CLI Timer Manager",)
-# here = os.path.abspath(os.path.dirname(__file__))
-#
-# try:
-#     with io.open(os.path.join(here, "README.md"), encoding="utf-8") as f:
-#         long_description = "\n" + f.read()
-# except FileNotFoundError:
-#     long_description = DESCRIPTION
+DESCRIPTION = "A CLI to record and report times spent in various activities."
+here = os.path.abspath(os.path.dirname(__file__))
+
+try:
+    with io.open(os.path.join(here, "README.md"), encoding="utf-8") as f:
+        long_description = "\n" + f.read()
+except FileNotFoundError:
+    long_description = DESCRIPTION
 
 
 setup(
     name="timemate",
     version=version,
-    description="",
+    description=DESCRIPTION,
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     author="Daniel A Graham",
     author_email="dnlgrhm@gmail.com",
     packages=find_packages(),
