@@ -26,7 +26,7 @@ sqlite3 time_mate.db < backup.sql       # Restore`
 
 - [ ] rename_account: argument row. Prompt for changes with old_name as default. Avoid duplicates
 
-- [ ] update_time: argument row. options account_name, memo, status?, datetime, timedelta  
+- [x] update_time: argument row. options account_name, memo, status?, datetime, timedelta  
 
 - [ ] allow range of weeks in report-week with prompt like report-month
 
@@ -36,7 +36,7 @@ sqlite3 time_mate.db < backup.sql       # Restore`
 
 
 
-- [ ] User errors
+- [x] User errors
     - An account should actually be regarded as the same as another account. Merge?
 
-- [ ] setup.py
+- [x] setup.py

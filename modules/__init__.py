@@ -11,19 +11,16 @@ def process_arguments():
     """
     Process sys.argv to get the necessary parameters, like the database file location.
     """
-    print(f"using {CONFIG_FILE = }")
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
             timemate_home = json.load(f).get("TIMEMATEHOME")
     else:
         envhome = os.environ.get("TIMEMATEHOME")
-        print(f"got {envhome = }")
         if envhome:
             timemate_home = envhome
         else:
             userhome = os.path.expanduser("~")
             timemate_home = os.path.join(userhome, ".timemate_home/")
-    print(f"using {timemate_home}")
 
     backup_dir = os.path.join(timemate_home, "backup")
     log_dir = os.path.join(timemate_home, "logs")

@@ -17,11 +17,10 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
-               timemate_home)
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
 
-AllowedMinutes = Literal[0, 1, 6, 12, 30, 60]
+AllowedMinutes = Literal[1, 6, 12, 30, 60]
 MINUTES = 1
 
 console = Console()
@@ -118,21 +117,39 @@ def account_add(account_name):
     conn.close()
 
 
-def format_hours_and_tenths(total_seconds: int, round_up: AllowedMinutes = MINUTES):
+# def format_hours_and_tenths(total_seconds: int, round_up: AllowedMinutes = 1):
+#     """
+#     Convert seconds into hours and tenths of an hour rounding up to the nearest AllowedMinutes.
+#     """
+#     if round_up <= 1:
+#         # hours, minutes and seconds if not rounded up
+#         return format_hours_minutes(total_seconds)
+#     seconds = total_seconds
+#     minutes = seconds // 60
+#     if seconds % 60:
+#         minutes += 1
+#     if minutes:
+#         return f"{math.ceil(minutes/round_up)/(60/round_up)}h"
+#     else:
+#         return "0.0h"
+
+
+def format_hours_and_tenths(total_seconds: int):
     """
-    Convert seconds into hours and tenths of an hour rounding up to the nearest AllowedMinutes.
+    Convert seconds into hours and tenths of an hour, rounding up based on the global MINUTES setting.
     """
-    if round_up <= 1:
+    if MINUTES <= 1:
         # hours, minutes and seconds if not rounded up
         return format_hours_minutes(total_seconds)
+
     seconds = total_seconds
     minutes = seconds // 60
     if seconds % 60:
         minutes += 1
     if minutes:
-        return f"{math.ceil(minutes/round_up)/(60/round_up)}h"
+        return f"{math.ceil(minutes / MINUTES) / (60 / MINUTES)}"
     else:
-        return "0.0h"
+        return "0.0"
 
 
 def format_dt(seconds: int):
@@ -154,44 +171,145 @@ def format_hours_minutes(total_seconds: int) -> str:
         if minutes >= 60:
             hours = minutes // 60
             minutes = minutes % 60
-    # else:
-    #     seconds = 0
-    # if hours:
-    #     until.append(f"{hours}:")
-    # else:
-    #     until.append("0:")
-    # if minutes:
-    #     until.append(f"{minutes:>02}")
-    # else:
-    #     until.append("00")
-    # if seconds:
-    #     until.append(f"{seconds}s")
-    # if not until:
-    #     until.append("0m")
     return f"{hours}:{minutes:>02}"
 
 
 def setup_database():
     conn = sqlite3.connect(db_path)  # Use a persistent SQLite database
     cursor = conn.cursor()
+
+    # Create Settings table
     cursor.execute(
-        """CREATE TABLE IF NOT EXISTS Accounts (
-                        account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        account_name TEXT NOT NULL UNIQUE,
-                        datetime INTEGER)"""
+        """
+        CREATE TABLE IF NOT EXISTS Settings (
+            setting_name TEXT PRIMARY KEY,
+            setting_value INTEGER
+        )
+    """
     )
+
+    # Insert default MINUTES value if not already set
     cursor.execute(
-        """CREATE TABLE IF NOT EXISTS Times (
-                        time_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        account_id INTEGER NOT NULL,
-                        memo TEXT, 
-                        status TEXT CHECK(status IN ('paused', 'running', 'inactive')) DEFAULT 'paused',
-                        timedelta INTEGER NOT NULL DEFAULT 0,
-                        datetime INTEGER,
-                        FOREIGN KEY (account_id) REFERENCES Accounts(account_id))"""
+        """
+        INSERT OR IGNORE INTO Settings (setting_name, setting_value)
+        VALUES ('MINUTES', 1)
+    """
+    )
+
+    # Create Accounts table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Accounts (
+            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_name TEXT NOT NULL UNIQUE,
+            datetime INTEGER
+        )
+    """
+    )
+
+    # Create Times table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Times (
+            time_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            memo TEXT, 
+            status TEXT CHECK(status IN ('paused', 'running', 'inactive')) DEFAULT 'paused',
+            timedelta INTEGER NOT NULL DEFAULT 0,
+            datetime INTEGER,
+            rounded_timedelta INTEGER,
+            FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+        )
+    """
+    )
+
+    conn.commit()
+
+    create_triggers(conn)
+
+    return conn
+
+
+def get_minutes_setting(conn):
+    cursor = conn.cursor()
+    cursor.execute("SELECT setting_value FROM Settings WHERE setting_name = 'MINUTES'")
+    result = cursor.fetchone()
+    return result[0] if result else 1  # Default to 1
+
+
+# MINUTES = get_minutes_setting(conn)
+# click_log(f"got {MINUTES = }")
+
+
+def create_triggers(conn):
+    minutes = get_minutes_setting(conn)
+
+    cursor = conn.cursor()
+
+    # Drop existing triggers to avoid duplicates
+    cursor.execute("DROP TRIGGER IF EXISTS calculate_rounded_timedelta_insert")
+    cursor.execute("DROP TRIGGER IF EXISTS calculate_rounded_timedelta_update")
+
+    # Create new triggers
+    cursor.execute(
+        f"""
+    CREATE TRIGGER calculate_rounded_timedelta_insert
+    AFTER INSERT ON Times
+    FOR EACH ROW
+    BEGIN
+        UPDATE Times
+        SET rounded_timedelta = CEIL(NEW.timedelta / ({minutes} * 60.0)) * ({minutes} * 60)
+        WHERE time_id = NEW.time_id;
+    END;
+    """
+    )
+
+    cursor.execute(
+        f"""
+    CREATE TRIGGER calculate_rounded_timedelta_update
+    AFTER UPDATE OF timedelta ON Times
+    FOR EACH ROW
+    BEGIN
+        UPDATE Times
+        SET rounded_timedelta = CEIL(NEW.timedelta / ({minutes} * 60.0)) * ({minutes} * 60)
+        WHERE time_id = NEW.time_id;
+    END;
+    """
+    )
+
+    conn.commit()
+
+
+@click.command()
+@click.argument("new_minutes", type=click.Choice(["1", "6", "12", "30", "60"]))
+def set_minutes(new_minutes):
+    """
+    Update the MINUTES setting from [1, 6, 12, 30, 60] for the user. With 1, elapsed times in reports are rounded up to the next minute, with 6 they are rounded up to the next 6/60 = 1/10 of an hour, with 12 to the next 12/60 = 2/10 of an hour and so forth.
+    """
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Update the database
+    new_minutes = int(new_minutes)
+    cursor.execute(
+        """
+        UPDATE Settings
+        SET setting_value = ?
+        WHERE setting_name = 'MINUTES'
+    """,
+        (new_minutes,),
     )
     conn.commit()
-    return conn
+
+    # Update the global MINUTES variable
+    global MINUTES
+    MINUTES = new_minutes
+
+    # Recreate triggers (if needed)
+    create_triggers(conn)
+
+    console.print(f"[green]MINUTES setting updated to {new_minutes}.[/green]")
+    conn.close()
 
 
 @click.command()
@@ -414,19 +532,20 @@ def timer_update(position):
 
 
 @cli.command(short_help="Shows info for TimeMate")
-def settings():
+def info():
     """Show application information."""
 
-    _settings()
+    _info()
 
 
-def _settings():
+def _info():
     console.print(
         f"""\
 [#87CEFA]Time Mate[/#87CEFA]
 version: [green]{version}[/green]
 config:  [green]{CONFIG_FILE}[/green]
 home:    [green]{timemate_home}[/green]
+MINUTES: [green]{MINUTES}[/green]
 """
     )
 
@@ -457,7 +576,7 @@ def _list_timers(include_all=False):
     # Fetch timers based on the filter
     cursor.execute(
         f"""
-        SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime 
+        SELECT T.time_id, A.account_name, T.memo, T.status, T.rounded_timedelta, T.datetime 
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE {status_filter}
@@ -670,7 +789,6 @@ def report_week(report_date):
         day_total = cursor.fetchone()[0] or 0
         if day_total == 0:
             continue
-        # click.echo(f"{day_total = }")
         console.print(
             f"\n[bold][green]{day.strftime('%a %b %-d')}[/green] - [yellow]{format_hours_and_tenths(day_total)}[/yellow][/bold]"
         )
@@ -731,7 +849,7 @@ def report_month():
     # Total time for the month
     cursor.execute(
         """
-        SELECT SUM(T.timedelta)
+        SELECT SUM(T.rounded_timedelta)
         FROM Times T
         WHERE T.datetime BETWEEN ? AND ?
         """,
@@ -746,7 +864,7 @@ def report_month():
     # Breakdown by account
     cursor.execute(
         """
-        SELECT A.account_name, SUM(T.timedelta)
+        SELECT A.account_name, SUM(T.rounded_timedelta)
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE T.datetime BETWEEN ? AND ?
@@ -765,7 +883,7 @@ def report_month():
         # Timers for the account
         cursor.execute(
             """
-            SELECT T.timedelta, T.datetime, T.memo
+            SELECT T.rounded_timedelta, T.datetime, T.memo
             FROM Times T
             JOIN Accounts A ON T.account_id = A.account_id
             WHERE A.account_name = ? AND T.datetime BETWEEN ? AND ?
@@ -775,13 +893,13 @@ def report_month():
         )
         timers = cursor.fetchall()
 
-        for timedelta, datetime_val, memo in timers:
+        for rounded_timedelta, datetime_val, memo in timers:
             datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
                 "%d %H:%M"
             )
             memo_str = f" ({memo})" if memo else ""
             console.print(
-                f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
+                f"  [yellow]{format_hours_and_tenths(rounded_timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
             )
 
     conn.close()
@@ -920,7 +1038,7 @@ def report_account(tree):
             # Timers for the account in this month
             cursor.execute(
                 """
-                SELECT T.timedelta, T.datetime, T.memo
+                SELECT T.rounded_timedelta, T.datetime, T.memo
                 FROM Times T
                 WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
                 ORDER BY T.datetime
@@ -929,12 +1047,14 @@ def report_account(tree):
             )
             timers = cursor.fetchall()
 
-            for timedelta, datetime_val, memo in timers:
+            for rounded_timedelta, datetime_val, memo in timers:
                 datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
                     "%d %H:%M"
                 )
-                total += timedelta
-                paths.append((account_name, memo or "", timedelta, datetime_val))
+                total += rounded_timedelta
+                paths.append(
+                    (account_name, memo or "", rounded_timedelta, datetime_val)
+                )
 
         if tree:
             # Build and display the tree
@@ -951,7 +1071,7 @@ def report_account(tree):
                 # Total time for the account in this month
                 cursor.execute(
                     """
-                    SELECT SUM(T.timedelta)
+                    SELECT SUM(T.rounded_timedelta)
                     FROM Times T
                     WHERE T.account_id = ? AND T.datetime BETWEEN ? AND ?
                     """,
@@ -968,13 +1088,13 @@ def report_account(tree):
 
                 for path in paths:
                     if path[0] == account_name:
-                        account, memo, timedelta, datetime_val = path
+                        account, memo, rounded_timedelta, datetime_val = path
                         datetime_str = datetime.datetime.fromtimestamp(
                             datetime_val
                         ).strftime("%d %H:%M")
                         memo_str = f" ({memo})" if memo else ""
                         console.print(
-                            f"  [bold yellow]{format_hours_and_tenths(timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
+                            f"  [bold yellow]{format_hours_and_tenths(rounded_timedelta)}[/bold yellow] [green]{datetime_str}[/green]{memo_str}"
                         )
 
         # Move to the next month
@@ -1070,7 +1190,6 @@ def populate(file, format):
 
     # Populate Accounts
     accounts = data.get("accounts", [])
-    click.echo(f"{accounts = }")
     for account in accounts:
         account_name = account["account_name"]
         try:
@@ -1085,7 +1204,6 @@ def populate(file, format):
 
     # Populate Times
     times = data.get("times", [])
-    # click.echo(f"{times = }")
 
     for time_entry in times:
         account_name = time_entry["account_name"]
@@ -1371,7 +1489,8 @@ cli.add_command(report_account)
 cli.add_command(report_month)
 cli.add_command(report_week)
 cli.add_command(set_home)
-cli.add_command(settings)
+cli.add_command(set_minutes)
+cli.add_command(info)
 cli.add_command(timer_add)
 cli.add_command(timer_archive)
 cli.add_command(timer_delete)
@@ -1381,8 +1500,12 @@ cli.add_command(timer_update)
 
 
 def main():
+    conn = setup_database()  # Set up the database connection
+    global MINUTES  # Ensure MINUTES is accessible globally
+    MINUTES = get_minutes_setting(conn)  # Load MINUTES from the database
+    click_log(f"got {MINUTES = }")
     console.clear()
-    _settings()
+    _info()
     cli()
 
 
