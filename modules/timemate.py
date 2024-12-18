@@ -17,7 +17,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
+from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
+               timemate_home)
 from .__version__ import version
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
@@ -397,6 +398,58 @@ def timer_add():
 
 
 @click.command()
+@click.argument("shortcut", nargs=-1)
+def ta(shortcut):
+    """
+    Shortcut for adding a timer using the account id and, optionally, the entry for the memo.
+
+    Example:
+        add 27 "some writing"
+    """
+    if len(shortcut) < 1:
+        console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
+        return
+
+    try:
+        account_id = int(shortcut[0])  # First part is the account_id
+        memo = " ".join(shortcut[1:])  # The rest is the memo
+    except ValueError:
+        console.print("[red]Invalid account_id. Must be an integer.[/red]")
+        return
+
+    # Add the timer
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    # Check if the account_id exists
+    cursor.execute(
+        "SELECT account_name FROM Accounts WHERE account_id = ?", (account_id,)
+    )
+    result = cursor.fetchone()
+
+    if not result:
+        console.print(f"[red]No account found with account_id {account_id}.[/red]")
+        conn.close()
+        return
+
+    account_name = result[0]
+    now = timestamp()
+    cursor.execute(
+        """
+        INSERT INTO Times (account_id, memo, status, timedelta, datetime)
+        VALUES (?, ?, 'paused', 0, ?)
+        """,
+        (account_id, memo, now),
+    )
+    conn.commit()
+    conn.close()
+
+    console.print(
+        f"[green]Timer added for account '{account_name}' with memo: '{memo}'[/green]"
+    )
+
+
+@click.command()
 @click.argument("position", type=int)
 def timer_update(position):
     """
@@ -617,6 +670,14 @@ def _list_timers(include_all=False):
     conn.close()
 
 
+@cli.command("ts", short_help="Shortcut for timer-start")
+@click.argument("position", type=int)
+@click.pass_context
+def timer_start_shortcut(ctx, position):
+    """Shortcut for "timer-start". Start timer at POSITION."""
+    ctx.forward(timer_start)
+
+
 @click.command()
 @click.argument("position", type=int)
 def timer_start(position):
@@ -697,6 +758,14 @@ def timer_start(position):
     conn.commit()
     conn.close()
     _list_timers()
+
+
+@cli.command("tp", short_help="Shortcut for timer-pause")
+@click.argument("position", type=int)
+@click.pass_context
+def timer_pause_shortcut(ctx, position):
+    """Shortcut for "timer-pause". Pause timer at POSITION."""
+    ctx.forward(timer_pause)
 
 
 @click.command()
@@ -1316,9 +1385,9 @@ def timer_delete(position, confirm):
         confirm = click.confirm("Are you sure you want to delete this timer?")
 
     if confirm:
-        cursor.execute("DELETE FROM Times WHERE time_id = ?", (timer_id,))
+        cursor.execute("DELETE FROM Times WHERE time_id = ?", (time_id,))
         conn.commit()
-        console.print(f"[green]Timer {timer_id} deleted successfully![/green]")
+        console.print(f"[green]Timer {time_id} deleted successfully![/green]")
     else:
         console.print("[blue]Delete operation cancelled.[/blue]")
 
@@ -1491,6 +1560,7 @@ cli.add_command(report_week)
 cli.add_command(set_home)
 cli.add_command(set_minutes)
 cli.add_command(info)
+cli.add_command(ta)
 cli.add_command(timer_add)
 cli.add_command(timer_archive)
 cli.add_command(timer_delete)

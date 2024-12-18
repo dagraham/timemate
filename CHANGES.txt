@@ -1,25 +1,29 @@
-Recent tagged changes as of 2024-12-18 11:27:20.067513:
-- 0 seconds ago (HEAD -> working, tag: 0.0.8) Daniel Graham
+Recent tagged changes as of 2024-12-18 12:49:10.578160:
+- 0 seconds ago (HEAD -> working, tag: 0.0.9) Daniel Graham
+    736facc 2024-12-18 12:49:10 -0500
+    Tagged version 0.0.9. Shortcuts
+
+- 82 minutes ago (tag: 0.0.8) Daniel Graham
     edfb11d 2024-12-18 11:27:20 -0500
     Tagged version 0.0.8.
 
-- 49 seconds ago (tag: 0.0.7, origin/working) Daniel Graham
+- 83 minutes ago (tag: 0.0.7) Daniel Graham
     60e43be 2024-12-18 11:26:31 -0500
     Tagged version 0.0.7. bump.py and upload_sdist tweaks
 
-- 14 minutes ago (tag: 0.0.6) Daniel Graham
+- 2 hours ago (tag: 0.0.6) Daniel Graham
     a68ba30 2024-12-18 11:13:47 -0500
     Tagged version 0.0.6.
 
-- 15 hours ago (tag: 0.0.5) Daniel Graham
+- 16 hours ago (tag: 0.0.5) Daniel Graham
     b533dc9 2024-12-17 20:39:45 -0500
     Tagged version 0.0.5.
 
-- 20 hours ago (tag: 0.0.4) Daniel Graham
+- 21 hours ago (tag: 0.0.4) Daniel Graham
     4a0e95e 2024-12-17 15:21:38 -0500
     Tagged version 0.0.4.
 
-- 21 hours ago (tag: 0.0.3) Daniel Graham
+- 22 hours ago (tag: 0.0.3) Daniel Graham
     ee202ca 2024-12-17 14:52:52 -0500
     Tagged version 0.0.3.
 
@@ -74,8 +78,3 @@ Recent tagged changes as of 2024-12-18 11:27:20.067513:
 - 9 days ago (tag: 0.0.0a2) Daniel Graham
     963753d 2024-12-09 15:56:42 -0500
     Tagged version 0.0.0a2.
-
-- 9 days ago (tag: 0.0.0a1) Daniel Graham
-    f0e2a3e 2024-12-09 12:11:49 -0500
-    FuzzyCompletion from prompt_toolkit for account selection in
-    add_timer
