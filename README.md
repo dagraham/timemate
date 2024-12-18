@@ -11,8 +11,13 @@ Automatically updates the timer for time spent and, when starting a timer on a n
 - reporting times spent:  
     - by week:  
     list times spent by day for a specified week for all accounts
-    - by month:   
-    list times spent for a specified month grouped by month and account for all accounts
+    ![report-week](./png/week.png)
     - by account:   
-    list times spent by month for a specified account with options to specify all months for the account, a range of months or a specific month
+    list times spent for specified account(s) and month(s)
+    ![report-account](./png/monthly.png)
+    - by account tree:   
+    display aggregates of times spent for specified account(s) and month(s) in a tree diagram
+    ![report-acount --tree](./png/tree.png)
+
+    These reports reflect the setting `MINUTES=6` which causes all times to be rounded up to the nearest 6 minutes or 1/10 of an hour.
 
