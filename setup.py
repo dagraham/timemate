@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 from modules.__version__ import version
 
-DESCRIPTION = "A CLI to record and report times spent in various activities."
+DESCRIPTION = "Record and report times spent in various activities."
 here = os.path.abspath(os.path.dirname(__file__))
 
 try:
