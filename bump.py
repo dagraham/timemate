@@ -7,7 +7,7 @@ from datetime import datetime
 from modules.__version__ import version
 
 
-def check_output(cmd: str):
+def check_output(cmd: str) -> [bool, str]:
     if not cmd:
         return
     res = ""
