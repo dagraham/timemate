@@ -4,7 +4,6 @@ import json
 import math
 import os
 import sqlite3
-import time
 from pathlib import Path
 from typing import Literal
 
@@ -14,8 +13,6 @@ from click_shell import shell
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
-from rich.layout import Layout
-from rich.live import Live
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
@@ -54,13 +51,20 @@ def click_log(msg: str):
         )
 
 
-# click_log(
-#     f"{timemate_home = }; {backup_dir = }; {log_dir =}, {db_path = }; {version = }"
-# )
+@shell(
+    prompt="TimeMate> ",
+    intro="Welcome to the TimeMate shell! Type ? or help for commands.",
+)
+def cli():
+    """TimeMate: record and report times spent in various activities"
+
+    Started without any options, open a TimeMate shell.
+    """
+    conn = setup_database()
 
 
 # Other imports and functions remain unchanged...
-@click.command(short_help="Archive timers dated before today")
+@cli.command("timer-archive", short_help="Archive timers dated before today")
 def timer_archive():
     """
     Archive timers by setting the status to 'inactive' for all timers with start times before today. Such timers will not be displayed by list-timers unless the flag '--all' is appended.
@@ -88,21 +92,9 @@ def timer_archive():
     conn.close()
 
 
-@shell(
-    prompt="TimeMate> ",
-    intro="Welcome to the TimeMate shell! Type ? or help for commands.",
-)
-def cli():
-    """TimeMate: record and report times spent in various activities"
-
-    Started without any options, open a TimeMate shell.
-    """
-    conn = setup_database()
-
-
-@click.command()
+@cli.command("account-new")
 @click.argument("account_name")
-def account_add(account_name):
+def account_new(account_name):
     """Add a new account."""
     conn = setup_database()
     cursor = conn.cursor()
@@ -266,7 +258,7 @@ def create_triggers(conn):
     conn.commit()
 
 
-@click.command(short_help="Set the round-up value for report times")
+@cli.command("set-minutes", short_help="Set the round-up value for report times")
 @click.argument("new_minutes", type=click.Choice(["1", "6", "12", "30", "60"]))
 def set_minutes(new_minutes):
     """
@@ -298,8 +290,8 @@ def set_minutes(new_minutes):
     conn.close()
 
 
-@click.command()
-def list_accounts():
+@cli.command("account-list")
+def account_list():
     """List all accounts."""
     _accounts_list()
 
@@ -318,8 +310,8 @@ def _accounts_list():
     conn.close()
 
 
-@click.command(short_help="add a new timer")
-def timer_add():
+@cli.command("timer-new", short_help="add a new timer")
+def timer_new():
     """
     Add a timer. Use fuzzy autocompletion to select or create an account,
     then optionally add a memo to describe the time spent.
@@ -382,14 +374,13 @@ def timer_add():
     conn.close()
 
 
-@click.command(short_help="shortcut for timer-add")
+@cli.command("tn", short_help="shortcut for timer-new")
 @click.argument("arguments", nargs=-1)
-def ta(arguments):
+def tn(arguments):
     """
-    Shortcut for adding a timer using arguments <account id> and [memo]
+    Shortcut for adding a timer with <account id> and [memo]
 
-    Example:
-        ta 27 some writing
+    Example: tn 27 some writing
     """
     if len(arguments) < 1:
         console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
@@ -434,7 +425,7 @@ def ta(arguments):
     )
 
 
-@click.command()
+@cli.command("timer-update")
 @click.argument("position", type=int)
 def timer_update(position):
     """
@@ -569,7 +560,7 @@ def timer_update(position):
     console.print(f"[green]Timer {position} updated successfully![/green]")
 
 
-@cli.command(short_help="Shows info for TimeMate")
+@cli.command("info", short_help="Shows info for TimeMate")
 def info():
     """Show application information."""
 
@@ -588,26 +579,28 @@ MINUTES: [green]{MINUTES}[/green]
     )
 
 
-@click.command()
-@click.option("--live", is_flag=True, help="Enable live display with periodic refresh.")
+@cli.command("tl", short_help="Shortcut for timer-list")
 @click.option(
-    "--interval",
-    default=60,
-    type=int,
-    help="Refresh interval in seconds (default: 60).",
+    "--all", is_flag=True, default=False, help="Include timers with any status."
 )
-@click.option("--all", is_flag=True, help="Include timers with any status.")
-def list_timers(live, interval, all):
+@click.pass_context
+def timer_start_shortcut(ctx, all):
+    """Shortcut for "timer-start". Start timer at POSITION."""
+    ctx.forward(timer_list)
+
+
+@cli.command("timer-list")
+@click.option(
+    "--all", is_flag=True, default=False, help="Include timers with any status."
+)
+def timer_list(all):
     """
     List timers. By default, shows only timers with status in ('running', 'paused').
     """
-    if live:
-        refresh_timers_live(interval, all)
-    else:
-        _list_timers(all)
+    _timer_list(all)
 
 
-def _list_timers(include_all=False):
+def _timer_list(include_all=False):
     global pos_to_id
     conn = setup_database()
     cursor = conn.cursor()
@@ -622,152 +615,46 @@ def _list_timers(include_all=False):
     # Fetch timers based on the filter
     cursor.execute(
         f"""
-        SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime
+        SELECT T.time_id, A.account_name, T.memo, T.status, T.rounded_timedelta, T.datetime 
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE {status_filter}
         ORDER BY T.time_id
         """
     )
+    now = round(datetime.datetime.now().timestamp())
+    which = "All" if include_all else "Active"
     timers = cursor.fetchall()
-    conn.close()
 
-    table = build_timers_table(timers)
-    console.print(table)
-
-
-def refresh_timers_live(interval, include_all):
-    """
-    Enable live display for list_timers with periodic refresh.
-    """
-    layout = Layout()
-    layout.split_column(
-        Layout(name="header", size=10),
-    )
-
-    def build_live_layout():
-        conn = setup_database()
-        cursor = conn.cursor()
-
-        status_filter = "1 = 1" if include_all else "status IN ('running', 'paused')"
-        cursor.execute(
-            f"""
-            SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime
-            FROM Times T
-            JOIN Accounts A ON T.account_id = A.account_id
-            WHERE {status_filter}
-            ORDER BY T.time_id
-            """
-        )
-        timers = cursor.fetchall()
-        conn.close()
-
-        layout["header"].update(build_timers_table(timers))
-        return layout
-
-    with Live(build_live_layout(), refresh_per_second=1) as live:
-        while True:
-            time.sleep(interval)
-            live.update(build_live_layout())
-
-
-def build_timers_table(timers):
-    """
-    Build a Rich table for displaying timers.
-    """
-    global pos_to_id
-    table = Table(title="Timers", expand=True)
-    table.add_column("Row", justify="center", width=3, style="dim")
-    table.add_column("Account Name", width=15)
-    table.add_column("Memo", justify="center", width=8)
-    table.add_column("Status", justify="center", style="green", width=6)
-    table.add_column("Time", justify="right")
+    table = Table(title=f"{which} Timers", caption=f"{format_dt(now)}", expand=True)
+    table.add_column("row", justify="center", width=3, style="dim")
+    table.add_column("account name", width=15)
+    table.add_column("memo", justify="center", width=8)
+    table.add_column("status", justify="center", style="green", width=6)
+    table.add_column("time", justify="right", width=4),
     table.add_column("date", justify="center", width=10)
 
-    now = round(datetime.datetime.now().timestamp())
     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
         timers, start=1
     ):
         pos_to_id[idx] = time_id
         elapsed = timedelta + (now - start_time if status == "running" else 0)
-        status_color = "yellow" if status == "running" else "green"
+        status_color = (
+            "yellow"
+            if status == "running"
+            else "green" if status == "paused" else "blue"
+        )
         table.add_row(
             str(idx),
             f"[{status_color}]{account_name}[/{status_color}]",
             f"[{status_color}]{memo}[/{status_color}]",
             f"[{status_color}]{status}[/{status_color}]",
-            # f"[{status_color}]{elapsed // 60}m {elapsed % 60}s[/{status_color}]",
             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
             f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
         )
-    return table
-
-
-# @click.command()
-# @click.option(
-#     "--all", is_flag=True, default=False, help="Include timers with any status."
-# )
-# def list_timers(all):
-#     """
-#     List timers. By default, shows only timers with status in ('running', 'paused').
-#     """
-#     _list_timers(all)
-#
-#
-# def _list_timers(include_all=False):
-#     global pos_to_id
-#     conn = setup_database()
-#     cursor = conn.cursor()
-#
-#     if include_all:
-#         status_filter = "1 = 1"  # No filter, include all statuses
-#         console.print("[blue]Displaying all timers:[/blue]")
-#     else:
-#         status_filter = "status IN ('running', 'paused')"
-#         console.print("[blue]Displaying active timers (running, paused):[/blue]")
-#
-#     # Fetch timers based on the filter
-#     cursor.execute(
-#         f"""
-#         SELECT T.time_id, A.account_name, T.memo, T.status, T.rounded_timedelta, T.datetime
-#         FROM Times T
-#         JOIN Accounts A ON T.account_id = A.account_id
-#         WHERE {status_filter}
-#         ORDER BY T.time_id
-#         """
-#     )
-#     timers = cursor.fetchall()
-#
-#     table = Table(title="Timers", expand=True)
-#     table.add_column("row", justify="center", width=3, style="dim")
-#     table.add_column("account name", width=15)
-#     table.add_column("memo", justify="center", width=8)
-#     table.add_column("status", justify="center", style="green", width=6)
-#     table.add_column("time", justify="right", width=4),
-#     table.add_column("date", justify="center", width=10)
-#
-#     now = round(datetime.datetime.now().timestamp())
-#     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
-#         timers, start=1
-#     ):
-#         pos_to_id[idx] = time_id
-#         elapsed = timedelta + (now - start_time if status == "running" else 0)
-#         status_color = (
-#             "yellow"
-#             if status == "running"
-#             else "green" if status == "paused" else "blue"
-#         )
-#         table.add_row(
-#             str(idx),
-#             f"[{status_color}]{account_name}[/{status_color}]",
-#             f"[{status_color}]{memo}[/{status_color}]",
-#             f"[{status_color}]{status}[/{status_color}]",
-#             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
-#             f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
-#         )
-#     console.clear()
-#     console.print(table)
-#     conn.close()
+    console.clear()
+    console.print(table)
+    conn.close()
 
 
 @cli.command("ts", short_help="Shortcut for timer-start")
@@ -778,7 +665,7 @@ def timer_start_shortcut(ctx, position):
     ctx.forward(timer_start)
 
 
-@click.command()
+@cli.command("timer-start")
 @click.argument("position", type=int)
 def timer_start(position):
     """Start a timer."""
@@ -857,7 +744,7 @@ def timer_start(position):
 
     conn.commit()
     conn.close()
-    _list_timers()
+    _timer_list()
 
 
 @cli.command("tp", short_help="Shortcut for timer-pause")
@@ -867,7 +754,7 @@ def timer_pause_shortcut(ctx):
     ctx.forward(timer_pause)
 
 
-@click.command(short_help="Pause any running timer")
+@cli.command("timer-pause", short_help="Pause any running timer")
 def timer_pause():
     """Pause any running timer."""
     conn = setup_database()
@@ -887,10 +774,10 @@ def timer_pause():
     conn.commit()
 
     conn.close()
-    _list_timers()
+    _timer_list()
 
 
-@click.command(short_help="Generate a weekly report")
+@cli.command("report-week", short_help="Generate a weekly report")
 @click.argument("report_date", type=click.DateTime(formats=["%y-%m-%d"]))
 def report_week(report_date):
     """
@@ -965,7 +852,7 @@ def report_week(report_date):
     conn.close()
 
 
-@click.command(short_help="Generate a monthly report")
+@cli.command("report-month", short_help="Generate a monthly report")
 def report_month():
     """
     Generate a monthly report for the month containing a specified date.
@@ -1051,7 +938,7 @@ def report_month():
     conn.close()
 
 
-@click.command(short_help="Generate a report for account(s)")
+@cli.command("report-account", short_help="Generate a report for account(s)")
 @click.option(
     "--tree", is_flag=True, default=False, help="Display the report as a tree summary."
 )
@@ -1301,7 +1188,7 @@ def build_tree(name, paths):
     return root
 
 
-@click.command(short_help="Populate the database with JSON or YAML records")
+@cli.command("populate", short_help="Populate the database with JSON or YAML records")
 @click.option(
     "-f",
     "--file",
@@ -1446,7 +1333,7 @@ def update_tmp_home(tmp_home: str = ""):
         console.print(f"[yellow]Temporary home directory not in use[/yellow]")
 
 
-@click.command(short_help="Delete the timer at POSITION")
+@cli.command("timer-delete", short_help="Delete the timer at POSITION")
 @click.argument("position", type=int)
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt.")
 def timer_delete(position, confirm):
@@ -1473,7 +1360,7 @@ def timer_delete(position, confirm):
     conn.close()
 
 
-@click.command(short_help="Merge one account into another")
+@cli.command("account-merge", short_help="Merge one account into another")
 def account_merge():
     """
     Merge one account into another, transferring all timers and deleting the source account.
@@ -1560,7 +1447,9 @@ def account_merge():
     conn.close()
 
 
-@click.command(short_help="Delete an account and all related times records")
+@cli.command(
+    "account-delete", short_help="Delete an account and all related times records"
+)
 def account_delete():
     """
     Delete an account and all related timer records.
@@ -1625,27 +1514,6 @@ def account_delete():
         f"[green]Account '{account_name}' and all related timers deleted successfully![/green]"
     )
     conn.close()
-
-
-cli.add_command(account_add)
-cli.add_command(account_delete)
-cli.add_command(account_merge)
-cli.add_command(list_accounts)
-cli.add_command(list_timers)
-cli.add_command(populate)
-cli.add_command(report_account)
-cli.add_command(report_month)
-cli.add_command(report_week)
-cli.add_command(set_home)
-cli.add_command(set_minutes)
-cli.add_command(info)
-cli.add_command(ta)
-cli.add_command(timer_add)
-cli.add_command(timer_archive)
-cli.add_command(timer_delete)
-cli.add_command(timer_pause)
-cli.add_command(timer_start)
-cli.add_command(timer_update)
 
 
 def main():
