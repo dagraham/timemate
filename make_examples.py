@@ -5,7 +5,7 @@ import sys
 from datetime import date, datetime, timedelta
 from typing import Union
 
-import lorem
+# import lorem
 
 num_accounts = 9
 onehour = 60 * 60  # in seconds
@@ -52,8 +52,8 @@ start_date = prevMonth(prevMonth(begMonth(last_date)))
 start_minutes = 9 * 60  # 09:00H
 end_minutes = 17 * 60  # 17:00H
 
-idle_minutes = [x for x in range(12, 91, 6)]
-timer_minutes = [x for x in range(24, 85, 6)]
+idle_minutes = [x for x in range(12, 91, 1)]
+timer_minutes = [x for x in range(24, 85, 1)]
 
 times = []
 

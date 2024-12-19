@@ -1,4 +1,6 @@
-# Time Mate
+# TimeMate
+
+This is the *TimeMate* user manual. It is best viewed at [GitHub.io](https://dagraham.github.io/timemate/). 
 
 *TimeMate* is intended to help you keep track of where your time goes. It provides both a CLI and Shell interface with methods for
 

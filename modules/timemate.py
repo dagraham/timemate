@@ -4,6 +4,7 @@ import json
 import math
 import os
 import sqlite3
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -13,12 +14,13 @@ from click_shell import shell
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
+from rich.layout import Layout
+from rich.live import Live
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
-               timemate_home)
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
@@ -587,14 +589,22 @@ MINUTES: [green]{MINUTES}[/green]
 
 
 @click.command()
+@click.option("--live", is_flag=True, help="Enable live display with periodic refresh.")
 @click.option(
-    "--all", is_flag=True, default=False, help="Include timers with any status."
+    "--interval",
+    default=60,
+    type=int,
+    help="Refresh interval in seconds (default: 60).",
 )
-def list_timers(all):
+@click.option("--all", is_flag=True, help="Include timers with any status.")
+def list_timers(live, interval, all):
     """
     List timers. By default, shows only timers with status in ('running', 'paused').
     """
-    _list_timers(all)
+    if live:
+        refresh_timers_live(interval, all)
+    else:
+        _list_timers(all)
 
 
 def _list_timers(include_all=False):
@@ -612,7 +622,7 @@ def _list_timers(include_all=False):
     # Fetch timers based on the filter
     cursor.execute(
         f"""
-        SELECT T.time_id, A.account_name, T.memo, T.status, T.rounded_timedelta, T.datetime 
+        SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE {status_filter}
@@ -620,13 +630,58 @@ def _list_timers(include_all=False):
         """
     )
     timers = cursor.fetchall()
+    conn.close()
 
+    table = build_timers_table(timers)
+    console.print(table)
+
+
+def refresh_timers_live(interval, include_all):
+    """
+    Enable live display for list_timers with periodic refresh.
+    """
+    layout = Layout()
+    layout.split_column(
+        Layout(name="header", size=10),
+    )
+
+    def build_live_layout():
+        conn = setup_database()
+        cursor = conn.cursor()
+
+        status_filter = "1 = 1" if include_all else "status IN ('running', 'paused')"
+        cursor.execute(
+            f"""
+            SELECT T.time_id, A.account_name, T.memo, T.status, T.timedelta, T.datetime
+            FROM Times T
+            JOIN Accounts A ON T.account_id = A.account_id
+            WHERE {status_filter}
+            ORDER BY T.time_id
+            """
+        )
+        timers = cursor.fetchall()
+        conn.close()
+
+        layout["header"].update(build_timers_table(timers))
+        return layout
+
+    with Live(build_live_layout(), refresh_per_second=1) as live:
+        while True:
+            time.sleep(interval)
+            live.update(build_live_layout())
+
+
+def build_timers_table(timers):
+    """
+    Build a Rich table for displaying timers.
+    """
+    global pos_to_id
     table = Table(title="Timers", expand=True)
-    table.add_column("row", justify="center", width=3, style="dim")
-    table.add_column("account name", width=15)
-    table.add_column("memo", justify="center", width=8)
-    table.add_column("status", justify="center", style="green", width=6)
-    table.add_column("time", justify="right", width=4),
+    table.add_column("Row", justify="center", width=3, style="dim")
+    table.add_column("Account Name", width=15)
+    table.add_column("Memo", justify="center", width=8)
+    table.add_column("Status", justify="center", style="green", width=6)
+    table.add_column("Time", justify="right")
     table.add_column("date", justify="center", width=10)
 
     now = round(datetime.datetime.now().timestamp())
@@ -635,22 +690,84 @@ def _list_timers(include_all=False):
     ):
         pos_to_id[idx] = time_id
         elapsed = timedelta + (now - start_time if status == "running" else 0)
-        status_color = (
-            "yellow"
-            if status == "running"
-            else "green" if status == "paused" else "blue"
-        )
+        status_color = "yellow" if status == "running" else "green"
         table.add_row(
             str(idx),
             f"[{status_color}]{account_name}[/{status_color}]",
             f"[{status_color}]{memo}[/{status_color}]",
             f"[{status_color}]{status}[/{status_color}]",
+            # f"[{status_color}]{elapsed // 60}m {elapsed % 60}s[/{status_color}]",
             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
             f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
         )
-    console.clear()
-    console.print(table)
-    conn.close()
+    return table
+
+
+# @click.command()
+# @click.option(
+#     "--all", is_flag=True, default=False, help="Include timers with any status."
+# )
+# def list_timers(all):
+#     """
+#     List timers. By default, shows only timers with status in ('running', 'paused').
+#     """
+#     _list_timers(all)
+#
+#
+# def _list_timers(include_all=False):
+#     global pos_to_id
+#     conn = setup_database()
+#     cursor = conn.cursor()
+#
+#     if include_all:
+#         status_filter = "1 = 1"  # No filter, include all statuses
+#         console.print("[blue]Displaying all timers:[/blue]")
+#     else:
+#         status_filter = "status IN ('running', 'paused')"
+#         console.print("[blue]Displaying active timers (running, paused):[/blue]")
+#
+#     # Fetch timers based on the filter
+#     cursor.execute(
+#         f"""
+#         SELECT T.time_id, A.account_name, T.memo, T.status, T.rounded_timedelta, T.datetime
+#         FROM Times T
+#         JOIN Accounts A ON T.account_id = A.account_id
+#         WHERE {status_filter}
+#         ORDER BY T.time_id
+#         """
+#     )
+#     timers = cursor.fetchall()
+#
+#     table = Table(title="Timers", expand=True)
+#     table.add_column("row", justify="center", width=3, style="dim")
+#     table.add_column("account name", width=15)
+#     table.add_column("memo", justify="center", width=8)
+#     table.add_column("status", justify="center", style="green", width=6)
+#     table.add_column("time", justify="right", width=4),
+#     table.add_column("date", justify="center", width=10)
+#
+#     now = round(datetime.datetime.now().timestamp())
+#     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
+#         timers, start=1
+#     ):
+#         pos_to_id[idx] = time_id
+#         elapsed = timedelta + (now - start_time if status == "running" else 0)
+#         status_color = (
+#             "yellow"
+#             if status == "running"
+#             else "green" if status == "paused" else "blue"
+#         )
+#         table.add_row(
+#             str(idx),
+#             f"[{status_color}]{account_name}[/{status_color}]",
+#             f"[{status_color}]{memo}[/{status_color}]",
+#             f"[{status_color}]{status}[/{status_color}]",
+#             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
+#             f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
+#         )
+#     console.clear()
+#     console.print(table)
+#     conn.close()
 
 
 @cli.command("ts", short_help="Shortcut for timer-start")
@@ -744,55 +861,30 @@ def timer_start(position):
 
 
 @cli.command("tp", short_help="Shortcut for timer-pause")
-@click.argument("position", type=int)
 @click.pass_context
-def timer_pause_shortcut(ctx, position):
-    """Shortcut for "timer-pause". Pause timer at POSITION."""
+def timer_pause_shortcut(ctx):
+    """Shortcut for "timer-pause". Pause a running timer, if any."""
     ctx.forward(timer_pause)
 
 
-@click.command()
-@click.argument("position", type=int)
-def timer_pause(position):
-    """Pause a timer."""
-    time_id = pos_to_id.get(position)
-    click_log(f"got {time_id = } from {position = }")
-
+@click.command(short_help="Pause any running timer")
+def timer_pause():
+    """Pause any running timer."""
     conn = setup_database()
     cursor = conn.cursor()
 
     now = timestamp()
+    click_log(f"{now = }")
 
-    if time_id:
-        cursor.execute(
-            """
-            SELECT time_id, datetime
-            FROM Times
-            WHERE time_id = ?
-            """,
-            (time_id,),
-        )
-
-        row = cursor.fetchone()
-
-        if row:
-            time_id, start_time = row
-            if start_time is None:
-                console.print(f"[yellow]Timer {position} is already paused.[/yellow]")
-            else:
-                elapsed = now - start_time
-                cursor.execute(
-                    """
-                    UPDATE Times
-                    SET status = 'paused', timedelta = timedelta + ?, datetime = ?
-                    WHERE time_id = ?
-                    """,
-                    (elapsed, now, time_id),
-                )
-                conn.commit()
-                console.print(f"[yellow]Timer {position} stopped![/yellow]")
-    else:
-        console.print("[red]Invalid position![/red]")
+    cursor.execute(
+        """
+        UPDATE Times
+        SET status = 'paused', timedelta = timedelta + (? - datetime), datetime = ?
+        WHERE status = 'running'
+        """,
+        (now, now),
+    )
+    conn.commit()
 
     conn.close()
     _list_timers()
@@ -1290,7 +1382,9 @@ def populate(file, format):
     console.print("[green]Database populated successfully![/green]")
 
 
-@cli.command("set-home", short_help="Set or clear a temporary home directory for TimeMate")
+@cli.command(
+    "set-home", short_help="Set or clear a temporary home directory for TimeMate"
+)
 @click.argument("home", required=False)  # Optional argument for the home directory
 def set_home(home):
     """
