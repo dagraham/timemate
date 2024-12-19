@@ -1,80 +1,80 @@
-Recent tagged changes as of 2024-12-18 16:29:50.508477:
-- 0 seconds ago (HEAD -> working, tag: 0.0.10) Daniel Graham
+Recent tagged changes as of 2024-12-19 13:37:29.970873:
+- 0 seconds ago (HEAD -> working, tag: 0.0.11) Daniel Graham
+    f297390 2024-12-19 13:37:29 -0500
+    Tagged version 0.0.11.
+
+- 21 hours ago (tag: 0.0.10) Daniel Graham
     8c19e38 2024-12-18 16:29:50 -0500
     Tagged version 0.0.10. README tweaks with images
 
-- 4 hours ago (tag: 0.0.9) Daniel Graham
+- 25 hours ago (tag: 0.0.9) Daniel Graham
     736facc 2024-12-18 12:49:10 -0500
     Tagged version 0.0.9. Shortcuts
 
-- 5 hours ago (tag: 0.0.8) Daniel Graham
+- 26 hours ago (tag: 0.0.8) Daniel Graham
     edfb11d 2024-12-18 11:27:20 -0500
     Tagged version 0.0.8.
 
-- 5 hours ago (tag: 0.0.7) Daniel Graham
+- 26 hours ago (tag: 0.0.7) Daniel Graham
     60e43be 2024-12-18 11:26:31 -0500
     Tagged version 0.0.7. bump.py and upload_sdist tweaks
 
-- 5 hours ago (tag: 0.0.6) Daniel Graham
+- 26 hours ago (tag: 0.0.6) Daniel Graham
     a68ba30 2024-12-18 11:13:47 -0500
     Tagged version 0.0.6.
 
-- 20 hours ago (tag: 0.0.5) Daniel Graham
+- 2 days ago (tag: 0.0.5) Daniel Graham
     b533dc9 2024-12-17 20:39:45 -0500
     Tagged version 0.0.5.
 
-- 25 hours ago (tag: 0.0.4) Daniel Graham
+- 2 days ago (tag: 0.0.4) Daniel Graham
     4a0e95e 2024-12-17 15:21:38 -0500
     Tagged version 0.0.4.
 
-- 26 hours ago (tag: 0.0.3) Daniel Graham
+- 2 days ago (tag: 0.0.3) Daniel Graham
     ee202ca 2024-12-17 14:52:52 -0500
     Tagged version 0.0.3.
 
-- 2 days ago (tag: 0.0.2) Daniel Graham
+- 3 days ago (tag: 0.0.2) Daniel Graham
     eb99355 2024-12-16 16:04:27 -0500
     Tagged version 0.0.2.
 
-- 2 days ago (tag: 0.0.1) Daniel Graham
+- 3 days ago (tag: 0.0.1) Daniel Graham
     85ad4e4 2024-12-16 12:23:37 -0500
     Tagged version 0.0.1.
 
-- 4 days ago (tag: 0.0.0rc8) Daniel Graham
+- 5 days ago (tag: 0.0.0rc8) Daniel Graham
     0809426 2024-12-14 17:13:52 -0500
     Tagged version 0.0.0rc8.
 
-- 5 days ago (tag: 0.0.0rc7) Daniel Graham
+- 6 days ago (tag: 0.0.0rc7) Daniel Graham
     7b8b706 2024-12-13 16:27:07 -0500
     Tagged version 0.0.0rc7.
 
-- 5 days ago (tag: 0.0.0rc6) Daniel Graham
+- 6 days ago (tag: 0.0.0rc6) Daniel Graham
     b540cb0 2024-12-13 13:52:34 -0500
     Tagged version 0.0.0rc6.
 
-- 5 days ago (tag: 0.0.0rc5) Daniel Graham
+- 6 days ago (tag: 0.0.0rc5) Daniel Graham
     0f4ad78 2024-12-13 13:41:35 -0500
     Tagged version 0.0.0rc5.
 
-- 5 days ago (tag: 0.0.0rc4) Daniel Graham
+- 6 days ago (tag: 0.0.0rc4) Daniel Graham
     8142a4a 2024-12-13 12:20:30 -0500
     Tagged version 0.0.0rc4.
 
-- 5 days ago (tag: 0.0.0rc3) Daniel Graham
+- 6 days ago (tag: 0.0.0rc3) Daniel Graham
     e84747c 2024-12-13 12:17:35 -0500
     Tagged version 0.0.0rc3.
 
-- 7 days ago (tag: 0.0.0rc2) Daniel Graham
+- 8 days ago (tag: 0.0.0rc2) Daniel Graham
     525b4b1 2024-12-11 14:22:27 -0500
     Tagged version 0.0.0rc2.
 
-- 7 days ago (tag: 0.0.0rc1) Daniel Graham
+- 8 days ago (tag: 0.0.0rc1) Daniel Graham
     c32371d 2024-12-11 08:21:54 -0500
     Tagged version 0.0.0rc1.
 
-- 7 days ago (tag: 0.0.0rc0) Daniel Graham
+- 8 days ago (tag: 0.0.0rc0) Daniel Graham
     34d2e1b 2024-12-11 08:13:18 -0500
     Tagged version 0.0.0rc0.
-
-- 8 days ago (tag: 0.0.0a3) Daniel Graham
-    a2c92f3 2024-12-10 15:05:16 -0500
-    Tagged version 0.0.0a3.
