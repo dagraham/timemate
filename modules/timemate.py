@@ -17,8 +17,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
-               timemate_home)
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
@@ -744,55 +743,30 @@ def timer_start(position):
 
 
 @cli.command("tp", short_help="Shortcut for timer-pause")
-@click.argument("position", type=int)
 @click.pass_context
-def timer_pause_shortcut(ctx, position):
-    """Shortcut for "timer-pause". Pause timer at POSITION."""
+def timer_pause_shortcut(ctx):
+    """Shortcut for "timer-pause". Pause a running timer, if any."""
     ctx.forward(timer_pause)
 
 
-@click.command()
-@click.argument("position", type=int)
-def timer_pause(position):
-    """Pause a timer."""
-    time_id = pos_to_id.get(position)
-    click_log(f"got {time_id = } from {position = }")
-
+@click.command(short_help="Pause any running timer")
+def timer_pause():
+    """Pause any running timer."""
     conn = setup_database()
     cursor = conn.cursor()
 
     now = timestamp()
+    click_log(f"{now = }")
 
-    if time_id:
-        cursor.execute(
-            """
-            SELECT time_id, datetime
-            FROM Times
-            WHERE time_id = ?
-            """,
-            (time_id,),
-        )
-
-        row = cursor.fetchone()
-
-        if row:
-            time_id, start_time = row
-            if start_time is None:
-                console.print(f"[yellow]Timer {position} is already paused.[/yellow]")
-            else:
-                elapsed = now - start_time
-                cursor.execute(
-                    """
-                    UPDATE Times
-                    SET status = 'paused', timedelta = timedelta + ?, datetime = ?
-                    WHERE time_id = ?
-                    """,
-                    (elapsed, now, time_id),
-                )
-                conn.commit()
-                console.print(f"[yellow]Timer {position} stopped![/yellow]")
-    else:
-        console.print("[red]Invalid position![/red]")
+    cursor.execute(
+        """
+        UPDATE Times
+        SET status = 'paused', timedelta = timedelta + (? - datetime), datetime = ?
+        WHERE status = 'running'
+        """,
+        (now, now),
+    )
+    conn.commit()
 
     conn.close()
     _list_timers()
@@ -1290,7 +1264,9 @@ def populate(file, format):
     console.print("[green]Database populated successfully![/green]")
 
 
-@cli.command("set-home", short_help="Set or clear a temporary home directory for TimeMate")
+@cli.command(
+    "set-home", short_help="Set or clear a temporary home directory for TimeMate"
+)
 @click.argument("home", required=False)  # Optional argument for the home directory
 def set_home(home):
     """
