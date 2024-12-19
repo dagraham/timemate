@@ -9,7 +9,7 @@ from typing import Literal
 
 import click
 import yaml  # pip install pyyaml
-from click_shell import shell
+from click_shell import Shell, shell
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
@@ -55,12 +55,12 @@ def click_log(msg: str):
     prompt="TimeMate> ",
     intro="Welcome to the TimeMate shell! Type ? or help for commands.",
 )
-def cli():
-    """TimeMate: record and report times spent in various activities"
+def cli() -> Shell:
+    """without [OPTIONS] or COMMAND: open a TimeMate shell
 
-    Started without any options, open a TimeMate shell.
+    Record and report times spent in various activities
     """
-    conn = setup_database()
+    pass
 
 
 # Other imports and functions remain unchanged...
@@ -380,7 +380,7 @@ def tn(arguments):
     """
     Shortcut for adding a timer with <account id> and [memo]
 
-    Example: tn 27 some writing
+    Example: tn 27 programming
     """
     if len(arguments) < 1:
         console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
@@ -607,10 +607,10 @@ def _timer_list(include_all=False):
 
     if include_all:
         status_filter = "1 = 1"  # No filter, include all statuses
-        console.print("[blue]Displaying all timers:[/blue]")
+        # console.print("[blue]Displaying all timers:[/blue]")
     else:
         status_filter = "status IN ('running', 'paused')"
-        console.print("[blue]Displaying active timers (running, paused):[/blue]")
+        # console.print("[blue]Displaying active timers (running, paused):[/blue]")
 
     # Fetch timers based on the filter
     cursor.execute(
@@ -652,7 +652,7 @@ def _timer_list(include_all=False):
             f"[{status_color}]{format_hours_and_tenths(elapsed)}[/{status_color}]",
             f"[{status_color}]{format_dt(start_time)}[/{status_color}]",
         )
-    console.clear()
+    # console.clear()
     console.print(table)
     conn.close()
 
@@ -750,7 +750,7 @@ def timer_start(position):
 @cli.command("tp", short_help="Shortcut for timer-pause")
 @click.pass_context
 def timer_pause_shortcut(ctx):
-    """Shortcut for "timer-pause". Pause a running timer, if any."""
+    """Shortcut for "timer-pause". Pause any running timer."""
     ctx.forward(timer_pause)
 
 
@@ -803,9 +803,9 @@ def report_week(report_date):
     week_total = cursor.fetchone()[0] or 0
 
     console.print(
-        f"[bold cyan]Weekly Report[/bold cyan] ({week_start.date()} to {week_end.date()}):"
+        f"[bold cyan]Weekly Report[/bold cyan] for {week_start.date()} to {week_end.date()}: [yellow]{format_hours_and_tenths(week_total)}[/yellow]"
     )
-    console.print(f"Total Time: [yellow]{format_hours_and_tenths(week_total)}[/yellow]")
+    # console.print(f"Total Time: [yellow]{format_hours_and_tenths(week_total)}[/yellow]")
 
     # Daily breakdown
     for i in range(7):
@@ -823,7 +823,7 @@ def report_week(report_date):
         if day_total == 0:
             continue
         console.print(
-            f"\n[bold][green]{day.strftime('%a %b %-d')}[/green] - [yellow]{format_hours_and_tenths(day_total)}[/yellow][/bold]"
+            f"[bold][green]{day.strftime('%a %b %-d')}[/green] - [yellow]{format_hours_and_tenths(day_total)}[/yellow][/bold]"
         )
 
         # Timers for the day
@@ -891,7 +891,7 @@ def report_month():
     month_total = cursor.fetchone()[0] or 0
 
     console.print(
-        f"\n[bold][cyan]Monthly Report[/cyan] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(month_total)}[/yellow][/bold]"
+        f"[bold][cyan]Monthly Report[/cyan] [green]{month_start.strftime('%b %Y')}[/green]: [yellow]{format_hours_and_tenths(month_total)}[/yellow][/bold]"
     )
 
     # Breakdown by account
@@ -910,7 +910,7 @@ def report_month():
 
     for account_name, account_total in accounts:
         console.print(
-            f"\n[bold][#6699ff]{account_name}[/#6699ff] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
+            f"[bold][#6699ff]{account_name}[/#6699ff] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
         )
 
         # Timers for the account
@@ -1098,7 +1098,7 @@ def report_account(tree):
         else:
             # Display the detailed report
             console.print(
-                f"\n[bold cyan]{month_start.strftime('%B %Y')} times for {ACCOUNTS}[/bold cyan]"
+                f"[bold cyan]{month_start.strftime('%B %Y')} times for {ACCOUNTS}[/bold cyan]"
             )
             for account_id, account_name in matching_accounts:
                 # Total time for the account in this month
@@ -1116,7 +1116,7 @@ def report_account(tree):
                     continue  # Skip accounts with no timers in this month
 
                 console.print(
-                    f"\n[bold][#6699ff]{account_name}[/#6699ff] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
+                    f"[bold][#6699ff]{account_name}[/#6699ff]: [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
                 )
 
                 for path in paths:
