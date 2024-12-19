@@ -1,11 +1,11 @@
-Recent tagged changes as of 2024-12-19 13:38:44.752642:
-- 43 seconds ago (HEAD -> working, tag: 0.0.12, origin/working) Daniel Graham
+Recent tagged changes as of 2024-12-19 13:42:26.464290:
+- 0 seconds ago (HEAD -> working, tag: 0.0.11) Daniel Graham
+    5f0267d 2024-12-19 13:42:26 -0500
+    Tagged version 0.0.11.
+
+- 4 minutes ago (tag: 0.0.12, origin/working) Daniel Graham
     cde31e6 2024-12-19 13:38:01 -0500
     Tagged version 0.0.12.
-
-- 75 seconds ago (tag: 0.0.11) Daniel Graham
-    f297390 2024-12-19 13:37:29 -0500
-    Tagged version 0.0.11.
 
 - 21 hours ago (tag: 0.0.10) Daniel Graham
     8c19e38 2024-12-18 16:29:50 -0500
