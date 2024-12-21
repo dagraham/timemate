@@ -10,7 +10,7 @@ from typing import Literal
 import click
 import yaml  # pip install pyyaml
 from click_shell import Shell, shell
-from prompt_toolkit import PromptSession
+from prompt_toolkit import PromptSession, prompt
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from rich.console import Console
 from rich.prompt import Prompt
@@ -55,7 +55,7 @@ def click_log(msg: str):
     prompt="TimeMate> ",
     intro="Welcome to the TimeMate shell! Type ? or help for commands.",
 )
-def cli() -> Shell:
+def cli() -> Shell | None:
     """without [OPTIONS] or COMMAND: open a TimeMate shell
 
     Record and report times spent in various activities
@@ -378,17 +378,33 @@ def timer_new():
 @click.argument("arguments", nargs=-1)
 def tn(arguments):
     """
-    Shortcut for adding a timer with <account id> and [memo]
+    Shortcut for adding a timer with <account id> and [memo].
 
     Example: tn 27 programming
     """
     if len(arguments) < 1:
-        console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
-        return
+        # Display the account list
+        _accounts_list()
+
+        # Prompt for input
+        from prompt_toolkit import prompt
+
+        user_input = prompt("Enter <Account ID> [memo]: ").strip()
+
+        if not user_input:
+            console.print(
+                "[red]Invalid input. Please provide an Account ID and optional memo.[/red]"
+            )
+            return
+
+        # Parse the input
+        arguments = user_input.split(maxsplit=1)
 
     try:
         account_id = int(arguments[0])  # First part is the account_id
-        memo = " ".join(arguments[1:])  # The rest is the memo
+        memo = (
+            " ".join(arguments[1:]) if len(arguments) > 1 else ""
+        )  # The rest is the memo
     except ValueError:
         console.print("[red]Invalid account_id. Must be an integer.[/red]")
         return
@@ -423,6 +439,57 @@ def tn(arguments):
     console.print(
         f"[green]Timer added for account '{account_name}' with memo: '{memo}'[/green]"
     )
+
+
+# @cli.command("tn", short_help="shortcut for timer-new")
+# @click.argument("arguments", nargs=-1)
+# def tn(arguments):
+#     """
+#     Shortcut for adding a timer with <account id> and [memo]
+#
+#     Example: tn 27 programming
+#     """
+#     if len(arguments) < 1:
+#         console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
+#         return
+#
+#     try:
+#         account_id = int(arguments[0])  # First part is the account_id
+#         memo = " ".join(arguments[1:])  # The rest is the memo
+#     except ValueError:
+#         console.print("[red]Invalid account_id. Must be an integer.[/red]")
+#         return
+#
+#     # Add the timer
+#     conn = setup_database()
+#     cursor = conn.cursor()
+#
+#     # Check if the account_id exists
+#     cursor.execute(
+#         "SELECT account_name FROM Accounts WHERE account_id = ?", (account_id,)
+#     )
+#     result = cursor.fetchone()
+#
+#     if not result:
+#         console.print(f"[red]No account found with account_id {account_id}.[/red]")
+#         conn.close()
+#         return
+#
+#     account_name = result[0]
+#     now = timestamp()
+#     cursor.execute(
+#         """
+#         INSERT INTO Times (account_id, memo, status, timedelta, datetime)
+#         VALUES (?, ?, 'paused', 0, ?)
+#         """,
+#         (account_id, memo, now),
+#     )
+#     conn.commit()
+#     conn.close()
+#
+#     console.print(
+#         f"[green]Timer added for account '{account_name}' with memo: '{memo}'[/green]"
+#     )
 
 
 @cli.command("timer-update")
@@ -584,7 +651,7 @@ MINUTES: [green]{MINUTES}[/green]
     "--all", is_flag=True, default=False, help="Include timers with any status."
 )
 @click.pass_context
-def timer_start_shortcut(ctx, all):
+def timer_list_shortcut(ctx, all):
     """Shortcut for "timer-start". Start timer at POSITION."""
     ctx.forward(timer_list)
 
@@ -777,14 +844,31 @@ def timer_pause():
     _timer_list()
 
 
+# @cli.command("report-week", short_help="Generate a weekly report")
+# @click.argument("report_date", type=click.DateTime(formats=["%y-%m-%d"]))
 @cli.command("report-week", short_help="Generate a weekly report")
-@click.argument("report_date", type=click.DateTime(formats=["%y-%m-%d"]))
-def report_week(report_date):
+def report_week():
     """
     Generate a weekly report for the week containing REPORT_DATE (format: YY-MM-DD).
     """
     conn = setup_database()
     cursor = conn.cursor()
+
+    console.clear()
+    session = PromptSession()
+    try:
+        week_input = session.prompt(
+            "Enter any date in the week for the report (YY-MM-DD): "
+        )
+        report_date = datetime.datetime.strptime(week_input, "%y-%m-%d")
+    except ValueError:
+        console.print("[red]Invalid date format! Please use YY-MM-DD.[/red]")
+        conn.close()
+        return
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
 
     # Calculate the start and end of the week (Monday to Sunday)
     week_start = report_date - datetime.timedelta(days=report_date.weekday())
@@ -861,6 +945,7 @@ def report_month():
     conn = setup_database()
     cursor = conn.cursor()
 
+    console.clear()
     session = PromptSession()
     try:
         month_input = session.prompt("Enter the month for the report (YY-MM): ")
@@ -948,6 +1033,7 @@ def report_account(tree):
     Prompts for account name (supports fuzzy matching) and optionally for a starting month.
     If no starting month is provided, generates a report for all months.
     """
+    console.clear()
     conn = setup_database()
     cursor = conn.cursor()
 
@@ -1162,7 +1248,7 @@ def build_tree(name, paths):
     total, data = aggregate_paths(paths)
 
     root = Tree(
-        f"[bold][blue]{name}[/blue] [yellow]{format_hours_and_tenths(total)}[/yellow][/bold]"
+        f"[bold][blue]{name}[/blue]: [yellow]{format_hours_and_tenths(total)}[/yellow][/bold]"
     )  # Create the root of the tree
     nodes = {}  # Store nodes to attach children dynamically
 
