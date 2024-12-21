@@ -81,7 +81,7 @@ while dt < last_date:
 
 data = {"accounts": accounts, "times": times}
 
-print(data)
+# print(data)
 
 
 def make_examples(egfile: str):
