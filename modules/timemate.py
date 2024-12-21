@@ -17,7 +17,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
+from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
+               timemate_home)
 from .__version__ import version
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
@@ -877,7 +878,7 @@ def report_week():
     # Total time for the week
     cursor.execute(
         """
-        SELECT SUM(T.timedelta)
+        SELECT SUM(T.rounded_timedelta)
         FROM Times T
         WHERE T.datetime BETWEEN ? AND ?
         ORDER BY T.datetime
@@ -896,7 +897,7 @@ def report_week():
         day = week_start + datetime.timedelta(days=i)
         cursor.execute(
             """
-            SELECT SUM(T.timedelta)
+            SELECT SUM(T.rounded_timedelta)
             FROM Times T
             WHERE T.datetime BETWEEN ? AND ?
             ORDER BY T.datetime
@@ -913,7 +914,7 @@ def report_week():
         # Timers for the day
         cursor.execute(
             """
-            SELECT A.account_name, T.timedelta, T.datetime, T.memo
+            SELECT A.account_name, T.rounded_timedelta, T.datetime, T.memo
             FROM Times T
             JOIN Accounts A ON T.account_id = A.account_id
             WHERE T.datetime BETWEEN ? AND ?
@@ -923,15 +924,16 @@ def report_week():
         )
         timers = cursor.fetchall()
 
-        for account_name, timedelta, datetime_val, memo in timers:
+        for account_name, rounded_timedelta, datetime_val, memo in timers:
             datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
                 "%H:%M"
             )
-            memo_str = f" ({memo})" if memo else ""
-            console.print(
-                # f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str} [#6699ff]{account_name}[/#6699ff] "
-                f"    [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green] [#6699ff]{account_name}[/#6699ff]{memo_str}"
-            )
+            if rounded_timedelta:
+                memo_str = f" ({memo})" if memo else ""
+                console.print(
+                    # f"  [yellow]{format_hours_and_tenths(timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str} [#6699ff]{account_name}[/#6699ff] "
+                    f"    [yellow]{format_hours_and_tenths(rounded_timedelta)}[/yellow] [green]{datetime_str}[/green] [#6699ff]{account_name}[/#6699ff]{memo_str}"
+                )
 
     conn.close()
 
@@ -995,7 +997,7 @@ def report_month():
 
     for account_name, account_total in accounts:
         console.print(
-            f"[bold][#6699ff]{account_name}[/#6699ff] [green]{month_start.strftime('%b %Y')}[/green] - [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
+            f"[bold][#6699ff]{account_name}[/#6699ff] [green]{month_start.strftime('%b %Y')}[/green]: [yellow]{format_hours_and_tenths(account_total)}[/yellow][/bold]"
         )
 
         # Timers for the account
@@ -1015,10 +1017,11 @@ def report_month():
             datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
                 "%d %H:%M"
             )
-            memo_str = f" ({memo})" if memo else ""
-            console.print(
-                f"  [yellow]{format_hours_and_tenths(rounded_timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
-            )
+            if rounded_timedelta:
+                memo_str = f" ({memo})" if memo else ""
+                console.print(
+                    f"  [yellow]{format_hours_and_tenths(rounded_timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
+                )
 
     conn.close()
 
