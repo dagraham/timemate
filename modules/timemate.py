@@ -20,6 +20,8 @@ from rich.tree import Tree
 from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
                timemate_home)
 from .__version__ import version
+from .common import (datetime_to_seconds, seconds_to_datetime, seconds_to_time,
+                     time_to_seconds)
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
 MINUTES = 1
@@ -61,7 +63,7 @@ def cli() -> Shell | None:
 
     Record and report times spent in various activities
     """
-    pass
+    _timer_list()
 
 
 # Other imports and functions remain unchanged...
@@ -518,7 +520,7 @@ def timer_update(position):
     timer = cursor.fetchone()
 
     if not timer:
-        console.print(f"[red]Timer ID {timer_id} not found![/red]")
+        console.print(f"[red]Timer ID {time_id} not found![/red]")
         conn.close()
         return
 
@@ -583,11 +585,12 @@ def timer_update(position):
 
     # Prompt for timedelta
     try:
+        default = seconds_to_time(int(current_timedelta))
         new_timedelta = session.prompt(
-            f"Enter timedelta (seconds) [{current_timedelta}]: ",
-            default=str(current_timedelta),
+            f"Enter elapsed time (time string) [{default}]: ",
+            default=default,
         )
-        new_timedelta = int(new_timedelta)
+        new_timedelta = time_to_seconds(new_timedelta)
     except (ValueError, KeyboardInterrupt):
         console.print("[red]Invalid input or operation cancelled.[/red]")
         conn.close()
@@ -596,15 +599,13 @@ def timer_update(position):
     # Prompt for datetime
     try:
         new_datetime_input = session.prompt(
-            f"Enter datetime (YY-MM-DD HH:MM) [{current_datetime_str}]: ",
+            f"Enter datetime (datetime string) [{current_datetime_str}]: ",
             default=current_datetime_str,
         )
         new_datetime = (
-            round(
-                datetime.datetime.strptime(
-                    new_datetime_input, "%y-%m-%d %H:%M"
-                ).timestamp()
-            )
+            datetime_to_seconds(
+                new_datetime_input
+            ) 
             if new_datetime_input.strip()
             else current_datetime
         )
