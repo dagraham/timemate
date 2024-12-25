@@ -2,8 +2,19 @@ import io
 import os
 
 from setuptools import find_packages, setup
+from setuptools.command.clean import clean as Clean
 
 from modules.__version__ import version
+
+
+class CleanCommand(Clean):
+    """Custom clean command to tidy up the project root."""
+
+    def run(self):
+        Clean.run(self)
+        for directory in ["dist", "build", "*.egg-info"]:
+            os.system(f"rm -rf {directory}")
+
 
 DESCRIPTION = "Record and report times spent in various activities."
 here = os.path.abspath(os.path.dirname(__file__))
@@ -24,6 +35,7 @@ setup(
     author="Daniel A Graham",
     author_email="dnlgrhm@gmail.com",
     packages=find_packages(),
+    cmdclass={"clean": CleanCommand},
     install_requires=[
         "click",
         "click-shell",

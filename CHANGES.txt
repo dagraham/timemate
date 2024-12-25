@@ -1,5 +1,9 @@
-Recent tagged changes as of 2024-12-25 12:56:14.612729:
-- 0 seconds ago (HEAD -> working, tag: 0.0.16) Daniel Graham
+Recent tagged changes as of 2024-12-25 13:05:29.623690:
+- 0 seconds ago (HEAD -> working, tag: 0.0.17) Daniel Graham
+    f8677ea 2024-12-25 13:05:29 -0500
+    Tagged version 0.0.17.
+
+- 9 minutes ago (tag: 0.0.16) Daniel Graham
     040ad27 2024-12-25 12:56:14 -0500
     Tagged version 0.0.16.
 
@@ -74,7 +78,3 @@ Recent tagged changes as of 2024-12-25 12:56:14.612729:
 - 12 days ago (tag: 0.0.0rc6) Daniel Graham
     b540cb0 2024-12-13 13:52:34 -0500
     Tagged version 0.0.0rc6.
-
-- 12 days ago (tag: 0.0.0rc5) Daniel Graham
-    0f4ad78 2024-12-13 13:41:35 -0500
-    Tagged version 0.0.0rc5.
