@@ -366,11 +366,42 @@ def timer_new():
         conn.close()
         return
 
-    # Add the timer
-    now = timestamp()
+    # Prompt for timedelta
+    try:
+        default = seconds_to_time(0)
+        new_timedelta = session.prompt(
+            f"Enter elapsed time (time string) [{default}]: ",
+            default=default,
+        )
+        new_timedelta = time_to_seconds(new_timedelta)
+    except (ValueError, KeyboardInterrupt):
+        console.print("[red]Invalid input or operation cancelled.[/red]")
+        conn.close()
+        return
+
+    # Prompt for datetime
+    try:
+        default = seconds_to_datetime(timestamp())
+        new_datetime_input = session.prompt(
+            f"Enter datetime (datetime string) [{default}]: ",
+            default=default,
+        )
+        new_datetime = (
+            datetime_to_seconds(
+                new_datetime_input
+            ) 
+            if new_datetime_input.strip()
+            else default
+        )
+    except (ValueError, KeyboardInterrupt):
+        console.print("[red]Invalid datetime format or operation cancelled.[/red]")
+        conn.close()
+        return 
+
+
     cursor.execute(
-        "INSERT INTO Times (account_id, memo, status, timedelta, datetime) VALUES (?, ?, 'paused', 0, ?)",
-        (account_id, memo, now),
+        "INSERT INTO Times (account_id, memo, status, timedelta, datetime) VALUES (?, ?, 'paused', ?, ?)",
+        (account_id, memo, new_timedelta, new_datetime),
     )
     conn.commit()
     console.print("[green]Timer added successfully![/green]")
@@ -612,7 +643,7 @@ def timer_update(position):
     except (ValueError, KeyboardInterrupt):
         console.print("[red]Invalid datetime format or operation cancelled.[/red]")
         conn.close()
-        return
+        return 
 
     # Update the timer record
     cursor.execute(
