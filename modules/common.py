@@ -1,8 +1,52 @@
 import re
 from datetime import datetime, timezone
 
-import pytz
 from dateutil.parser import parse, parserinfo
+from dateutil.tz import gettz
+
+
+def datetime_to_seconds(input_str: str) -> int:
+    """
+    Parses a datetime string with an optional timezone and returns the corresponding
+    seconds since the epoch as a positive or negative integer.
+
+    Args:
+        input_str (str): The input string in the format "<datetime> z<timezone>"
+                         or "<datetime> zNaive".
+
+    Returns:
+        int: Positive seconds for aware (with timezone), negative for naive (zNaive).
+    """
+    if "z" in input_str:
+        datetime_part, timezone_part = input_str.split("z", 1)
+    else:
+        datetime_part, timezone_part = input_str, None
+
+    # Create custom parserinfo with desired settings
+    info = parserinfo(dayfirst=False, yearfirst=True)
+
+    # Parse the datetime part
+    dt = parse(datetime_part.strip(), parserinfo=info)
+
+    if timezone_part:
+        timezone_part = timezone_part.strip()
+        if timezone_part.lower() == "float":
+            # Handle zNaive: Treat as UTC first, then negate
+            dt_utc = dt.replace(tzinfo=timezone.utc)
+            naive_seconds = int(dt_utc.timestamp())
+            return -naive_seconds
+        else:
+            # Handle other timezones: Aware datetime
+            tz = gettz(timezone_part)
+            if tz is None:
+                raise ValueError(f"Invalid timezone: {timezone_part}")
+            dt = dt.replace(tzinfo=tz)
+    else:
+        # Default to local timezone if no timezone is specified
+        dt = dt.astimezone()
+
+    # Return positive seconds for aware datetimes
+    return int(dt.timestamp())
 
 
 def time_to_seconds(time_str: str) -> int:
@@ -71,48 +115,6 @@ def seconds_to_time(seconds: int) -> str:
             result.append(f"{count}{unit}")
 
     return "".join(result) or "0s"  # Return '0s' for input 0
-
-
-def datetime_to_seconds(input_str: str) -> int:
-    """
-    Parses a datetime string with an optional timezone and returns the corresponding
-    seconds since the epoch as a positive or negative integer.
-
-    Args:
-        input_str (str): The input string in the format "<datetime> z<timezone>"
-                         or "<datetime> zFloat".
-
-    Returns:
-        int: Positive seconds for aware (with timezone), negative for float (zFloat).
-    """
-    if "z" in input_str:
-        datetime_part, timezone_part = input_str.split("z", 1)
-    else:
-        datetime_part, timezone_part = input_str, None
-
-    # Create custom parserinfo with desired settings
-    info = parserinfo(dayfirst=False, yearfirst=True)
-
-    # Parse the datetime part
-    dt = parse(datetime_part.strip(), parserinfo=info)
-
-    if timezone_part:
-        timezone_part = timezone_part.strip()
-        if timezone_part.lower() == "float":
-            # Handle zfloat: Treat as UTC first, then negate
-            dt_utc = dt.replace(tzinfo=timezone.utc)
-            float_seconds = int(dt_utc.timestamp())
-            return -float_seconds
-        else:
-            # Handle other timezones: Aware datetime
-            tz = pytz.timezone(timezone_part)
-            dt = tz.localize(dt)
-    else:
-        # Default to local timezone if no timezone is specified
-        dt = dt.astimezone()
-
-    # Return positive seconds for aware datetimes
-    return int(dt.timestamp())
 
 
 def seconds_to_datetime(seconds: int) -> datetime:
