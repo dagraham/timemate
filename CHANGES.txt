@@ -1,25 +1,29 @@
-Recent tagged changes as of 2024-12-25 13:37:41.531423:
-- 0 seconds ago (HEAD -> working, tag: 0.0.19) Daniel Graham
+Recent tagged changes as of 2024-12-25 13:57:20.794587:
+- 0 seconds ago (HEAD -> working, tag: 0.0.20) Daniel Graham
+    a93e205 2024-12-25 13:57:20 -0500
+    Tagged version 0.0.20.
+
+- 20 minutes ago (tag: 0.0.19) Daniel Graham
     65cd59a 2024-12-25 13:37:41 -0500
     Tagged version 0.0.19.
 
-- 25 minutes ago (tag: 0.0.18) Daniel Graham
+- 45 minutes ago (tag: 0.0.18) Daniel Graham
     d202d08 2024-12-25 13:12:30 -0500
     Tagged version 0.0.18.
 
-- 32 minutes ago (tag: 0.0.17) Daniel Graham
+- 52 minutes ago (tag: 0.0.17) Daniel Graham
     f8677ea 2024-12-25 13:05:29 -0500
     Tagged version 0.0.17.
 
-- 41 minutes ago (tag: 0.0.16) Daniel Graham
+- 61 minutes ago (tag: 0.0.16) Daniel Graham
     040ad27 2024-12-25 12:56:14 -0500
     Tagged version 0.0.16.
 
-- 24 hours ago (tag: 0.0.15) Daniel Graham
+- 25 hours ago (tag: 0.0.15) Daniel Graham
     051142c 2024-12-24 13:24:38 -0500
     Tagged version 0.0.15.
 
-- 24 hours ago (tag: 0.0.14) Daniel Graham
+- 25 hours ago (tag: 0.0.14) Daniel Graham
     8776f71 2024-12-24 13:15:27 -0500
     Tagged version 0.0.14.
 
@@ -74,7 +78,3 @@ Recent tagged changes as of 2024-12-25 13:37:41.531423:
 - 9 days ago (tag: 0.0.1) Daniel Graham
     85ad4e4 2024-12-16 12:23:37 -0500
     Tagged version 0.0.1.
-
-- 11 days ago (tag: 0.0.0rc8) Daniel Graham
-    0809426 2024-12-14 17:13:52 -0500
-    Tagged version 0.0.0rc8.
