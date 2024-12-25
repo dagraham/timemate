@@ -17,11 +17,14 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
-               timemate_home)
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
-from .common import (datetime_to_seconds, seconds_to_datetime, seconds_to_time,
-                     time_to_seconds)
+from .common import (
+    datetime_to_seconds,
+    seconds_to_datetime,
+    seconds_to_time,
+    time_to_seconds,
+)
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
 MINUTES = 1
@@ -387,17 +390,14 @@ def timer_new():
             default=default,
         )
         new_datetime = (
-            datetime_to_seconds(
-                new_datetime_input
-            ) 
+            datetime_to_seconds(new_datetime_input)
             if new_datetime_input.strip()
             else default
         )
     except (ValueError, KeyboardInterrupt):
         console.print("[red]Invalid datetime format or operation cancelled.[/red]")
         conn.close()
-        return 
-
+        return
 
     cursor.execute(
         "INSERT INTO Times (account_id, memo, status, timedelta, datetime) VALUES (?, ?, 'paused', ?, ?)",
@@ -634,16 +634,14 @@ def timer_update(position):
             default=current_datetime_str,
         )
         new_datetime = (
-            datetime_to_seconds(
-                new_datetime_input
-            ) 
+            datetime_to_seconds(new_datetime_input)
             if new_datetime_input.strip()
             else current_datetime
         )
     except (ValueError, KeyboardInterrupt):
         console.print("[red]Invalid datetime format or operation cancelled.[/red]")
         conn.close()
-        return 
+        return
 
     # Update the timer record
     cursor.execute(
