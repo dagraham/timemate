@@ -1,19 +1,31 @@
 import io
 import os
+import shutil
 
-from setuptools import find_packages, setup
-from setuptools.command.clean import clean as Clean
+from setuptools import Command, find_packages, setup
 
 from modules.__version__ import version
 
 
-class CleanCommand(Clean):
+class CleanCommand(Command):
     """Custom clean command to tidy up the project root."""
 
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
     def run(self):
-        Clean.run(self)
         for directory in ["dist", "build", "*.egg-info"]:
-            os.system(f"rm -rf {directory}")
+            if os.path.isdir(directory):
+                print(f"Removing directory: {directory}")
+                shutil.rmtree(directory)
+            elif os.path.isfile(directory):
+                print(f"Removing file: {directory}")
+                os.remove(directory)
 
 
 DESCRIPTION = "Record and report times spent in various activities."
