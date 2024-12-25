@@ -52,6 +52,7 @@ setup(
         "click",
         "click-shell",
         "prompt_toolkit",
+        "python-dateutil",
         "rich",
         "pyyaml",
         "pytz",
