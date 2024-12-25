@@ -30,6 +30,7 @@ setup(
         "prompt_toolkit",
         "rich",
         "pyyaml",
+        "pytz",
     ],
     python_requires=">=3.9",
     url="https://github.com/dagraham/timemate",  # Adjust based on the minimum Python version your app supports

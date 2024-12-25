@@ -132,11 +132,11 @@ def seconds_to_datetime(seconds: int) -> datetime:
         # Aware datetime: UTC to local time
         dt_utc = datetime.fromtimestamp(seconds, tz=timezone.utc)
         dt_local = dt_utc.astimezone()  # Convert to local timezone
-        return dt_local
+        return dt_local.strftime("%y-%m-%d %H:%M")
     else:
         # float datetime: Treat as UTC but without attaching a timezone
         dt_float = datetime.fromtimestamp(abs(seconds), tz=timezone.utc)
-        return dt_float.replace(tzinfo=None)
+        return dt_float.replace(tzinfo=None).strftime("%y0%m-%d %H:%M")
 
 
 if __name__ == "__main__":
