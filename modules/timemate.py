@@ -1,5 +1,5 @@
 import datetime
-import inspect
+# import inspect
 import json
 import math
 import os
@@ -10,51 +10,82 @@ from typing import Literal
 import click
 import yaml  # pip install pyyaml
 from click_shell import Shell, shell
+from dateutil.tz import gettz
 from prompt_toolkit import PromptSession, prompt
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
+from rich import box
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
+from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
+               timemate_home)
 from .__version__ import version
-from .common import (
-    datetime_to_seconds,
-    seconds_to_datetime,
-    seconds_to_time,
-    time_to_seconds,
-)
+from .common import click_log  # format_hours_and_tenths,
+from .common import datetime_to_seconds  # format_hours_minutes,
+from .common import (seconds_to_datetime, seconds_to_time, time_to_seconds,
+                     timestamp)
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
 MINUTES = 1
 
+
+def format_dt(seconds: int) -> str:
+    """
+    Formats a given number of seconds since the epoch into a string representation.
+
+    Args:
+        seconds (int): Positive seconds for aware datetime, negative for naive datetime.
+
+    Returns:
+        str: Formatted datetime string ("%y-%m-%d %H:%M").
+    """
+    if seconds >= 0:
+        # Aware datetime: Convert from UTC to local timezone
+        dt = datetime.datetime.fromtimestamp(seconds, tz=gettz("UTC")).astimezone()
+    else:
+        # Naive datetime: Treat as UTC without timezone adjustment
+        dt = datetime.datetime.utcfromtimestamp(-seconds).replace(tzinfo=None)
+
+    return dt.strftime("%y-%m-%d %H:%M")
+
+
+def format_hours_and_tenths(total_seconds: int):
+    """
+    Convert seconds into hours and tenths of an hour, rounding up based on the global MINUTES setting.
+    """
+    if MINUTES <= 1:
+        # hours, minutes and seconds if not rounded up
+        return format_hours_minutes(total_seconds)
+
+    seconds = total_seconds
+    minutes = seconds // 60
+    if seconds % 60:
+        minutes += 1
+    if minutes:
+        return f"{math.ceil(minutes / MINUTES) / (60 / MINUTES)}"
+    else:
+        return "0.0"
+
+
+def format_hours_minutes(total_seconds: int) -> str:
+    hours = minutes = seconds = 0
+    if total_seconds:
+        seconds = total_seconds
+        if seconds >= 60:
+            minutes = seconds // 60
+            seconds = seconds % 60
+            if seconds >= 30:
+                minutes += 1
+            seconds = 0
+        if minutes >= 60:
+            hours = minutes // 60
+            minutes = minutes % 60
+    return f"{hours}:{minutes:>02}"
+
+
 console = Console()
-
-
-def timestamp():
-    return round(datetime.datetime.now().timestamp())
-
-
-def format_datetime(
-    seconds: int, fmt: str = "%Y-%m-%d %H:%M %Z", stage: int = 1
-) -> str:
-    return f"{datetime.datetime.fromtimestamp(seconds).astimezone().strftime(fmt)}"
-
-
-def click_log(msg: str):
-    # Get the name of the calling function
-    caller_name = inspect.stack()[1].function
-    ts = timestamp()
-    log_name = format_datetime(ts, "%Y-%m-%d.log")
-
-    # Format the log message
-    with open(os.path.join(log_dir, log_name), "a") as debug_file:
-        msg = f"\nclick_log {format_datetime(timestamp())} [{caller_name}]\n{msg}"
-        click.echo(
-            msg,
-            file=debug_file,
-        )
 
 
 @shell(
@@ -116,46 +147,6 @@ def account_new(account_name):
     except sqlite3.IntegrityError:
         console.print(f"[red]Account '{account_name}' already exists![/red]")
     conn.close()
-
-
-def format_hours_and_tenths(total_seconds: int):
-    """
-    Convert seconds into hours and tenths of an hour, rounding up based on the global MINUTES setting.
-    """
-    if MINUTES <= 1:
-        # hours, minutes and seconds if not rounded up
-        return format_hours_minutes(total_seconds)
-
-    seconds = total_seconds
-    minutes = seconds // 60
-    if seconds % 60:
-        minutes += 1
-    if minutes:
-        return f"{math.ceil(minutes / MINUTES) / (60 / MINUTES)}"
-    else:
-        return "0.0"
-
-
-def format_dt(seconds: int):
-    dt = datetime.datetime.fromtimestamp(seconds)
-    return dt.strftime("%y-%m-%d %H:%M")
-
-
-def format_hours_minutes(total_seconds: int) -> str:
-    until = []
-    hours = minutes = seconds = 0
-    if total_seconds:
-        seconds = total_seconds
-        if seconds >= 60:
-            minutes = seconds // 60
-            seconds = seconds % 60
-            if seconds >= 30:
-                minutes += 1
-            seconds = 0
-        if minutes >= 60:
-            hours = minutes // 60
-            minutes = minutes % 60
-    return f"{hours}:{minutes:>02}"
 
 
 def setup_database():
@@ -221,12 +212,11 @@ def get_minutes_setting(conn):
     return result[0] if result else 1  # Default to 1
 
 
-# MINUTES = get_minutes_setting(conn)
-# click_log(f"got {MINUTES = }")
-
-
 def create_triggers(conn):
+    global MINUTES
     minutes = get_minutes_setting(conn)
+    MINUTES = minutes
+    click_log(f"got {MINUTES = }")
 
     cursor = conn.cursor()
 
@@ -475,57 +465,6 @@ def tn(arguments):
     )
 
 
-# @cli.command("tn", short_help="shortcut for timer-new")
-# @click.argument("arguments", nargs=-1)
-# def tn(arguments):
-#     """
-#     Shortcut for adding a timer with <account id> and [memo]
-#
-#     Example: tn 27 programming
-#     """
-#     if len(arguments) < 1:
-#         console.print("[red]Invalid input. Usage: add <account_id> [memo][/red]")
-#         return
-#
-#     try:
-#         account_id = int(arguments[0])  # First part is the account_id
-#         memo = " ".join(arguments[1:])  # The rest is the memo
-#     except ValueError:
-#         console.print("[red]Invalid account_id. Must be an integer.[/red]")
-#         return
-#
-#     # Add the timer
-#     conn = setup_database()
-#     cursor = conn.cursor()
-#
-#     # Check if the account_id exists
-#     cursor.execute(
-#         "SELECT account_name FROM Accounts WHERE account_id = ?", (account_id,)
-#     )
-#     result = cursor.fetchone()
-#
-#     if not result:
-#         console.print(f"[red]No account found with account_id {account_id}.[/red]")
-#         conn.close()
-#         return
-#
-#     account_name = result[0]
-#     now = timestamp()
-#     cursor.execute(
-#         """
-#         INSERT INTO Times (account_id, memo, status, timedelta, datetime)
-#         VALUES (?, ?, 'paused', 0, ?)
-#         """,
-#         (account_id, memo, now),
-#     )
-#     conn.commit()
-#     conn.close()
-#
-#     console.print(
-#         f"[green]Timer added for account '{account_name}' with memo: '{memo}'[/green]"
-#     )
-
-
 @cli.command("timer-update")
 @click.argument("position", type=int)
 def timer_update(position):
@@ -561,9 +500,7 @@ def timer_update(position):
 
     # Format current datetime for display
     current_datetime_str = (
-        datetime.datetime.fromtimestamp(current_datetime).strftime("%y-%m-%d %H:%M")
-        if current_datetime
-        else ""
+        seconds_to_datetime(current_datetime) if current_datetime else ""
     )
 
     # Fetch all accounts for fuzzy completion
@@ -724,7 +661,7 @@ def _timer_list(include_all=False):
     which = "All" if include_all else "Active"
     timers = cursor.fetchall()
 
-    table = Table(title=f"{which} Timers", caption=f"{format_dt(now)}", expand=True)
+    table = Table(title=f"{which} Timers", caption=f"{format_dt(now)}", expand=True, box=box.HEAVY_EDGE)
     table.add_column("row", justify="center", width=3, style="dim")
     table.add_column("account name", width=15)
     table.add_column("memo", justify="center", width=8)
