@@ -1,8 +1,15 @@
 # TimeMate
+<!-- <img src="https://raw.githubusercontent.com/dagraham/timemate/master/timematelogo.tiff" alt="timemate" title="timemate" width="200px" /> -->
 
-<img src="https://raw.githubusercontent.com/dagraham/timemate/master/timematelogo.tiff" alt="timemate" title="timemate" width="200px" />
+<pre>
+ ______
+  (  )
+   )(
+ _(__)_
 
-This is the *TimeMate* user manual. It is best viewed at [GitHub.io](https://dagraham.github.io/timemate/).
+</pre>
+
+![timemate](./png/TimeMateLogo200.tiff)   This is the *TimeMate* user manual.  It is best viewed at [GitHub.io](https://dagraham.github.io/timemate/). 
 
 *TimeMate* is intended to help you keep track of where your time goes. It provides both a CLI and Shell interface with methods for
 
