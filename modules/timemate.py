@@ -129,24 +129,18 @@ def timer_archive():
     conn.close()
 
 
-@cli.command("account-new")
-@click.argument("account_name")
-def account_new(account_name):
-    """Add a new account."""
-    conn = setup_database()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)",
-            (account_name, timestamp()),
-        )
-        conn.commit()
-        console.print(
-            f"[limegreen]Account '{account_name}' added successfully![/limegreen]"
-        )
-    except sqlite3.IntegrityError:
-        console.print(f"[red]Account '{account_name}' already exists![/red]")
-    conn.close()
+    # try:
+    #     cursor.execute(
+    #         "INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)",
+    #         (account_name, timestamp()),
+    #     )
+    #     conn.commit()
+    #     console.print(
+    #         f"[limegreen]Account '{account_name}' added successfully![/limegreen]"
+    #     )
+    # except sqlite3.IntegrityError:
+    #     console.print(f"[red]Account '{account_name}' already exists![/red]")
+    # conn.close()
 
 
 def setup_database():
@@ -305,6 +299,58 @@ def _accounts_list():
     console.print(table)
     conn.close()
 
+@cli.command("account-new", short_help="add a new account")
+def account_new():
+    """Add a new account."""
+    # Fetch all account names and positions for autocompletion
+    conn = setup_database()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    accounts = cursor.fetchall()
+
+    account_completions = {}
+    for idx, (account_id, account_name) in enumerate(accounts, start=1):
+        account_completions[str(idx)] = account_id  # Map position to account_id
+        account_completions[account_name.lower()] = account_id  # Map name to account_id
+
+    # Create a FuzzyCompleter with account names and positions
+    completer = FuzzyCompleter(
+        WordCompleter(account_completions.keys(), ignore_case=True)
+    )
+
+    # Use PromptSession for fuzzy autocompletion
+    session = PromptSession()
+    try:
+        selection = session.prompt(
+            "Enter name: ",
+            completer=completer,
+            complete_while_typing=True,
+        )
+    except KeyboardInterrupt:
+        console.print("[red]Cancelled by user.[/red]")
+        conn.close()
+        return
+
+    # Resolve selection to account_id
+    account_id = account_completions.get(selection.lower())
+    if account_id:  # If input is a new account name
+        console.print(f"[red]Account '{selection}' already exists.[/red]")
+    else:
+        cursor.execute("INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)", (selection, timestamp()))
+        conn.commit()
+        console.print(
+            f"[limegreen]Account '{selection}' added successfully![/limegreen]"
+        )
+        account_id = cursor.lastrowid
+    conn.close()
+
+@cli.command("tn", short_help="Shortcut for timer-new")
+def timer_new_shortcut():
+    """Shortcut for "timer-new". Add a new timer."""
+    timer_new()
+
+
 
 @cli.command("timer-new", short_help="add a new timer")
 def timer_new():
@@ -347,6 +393,10 @@ def timer_new():
     if not account_id:  # If input is a new account name
         cursor.execute("INSERT INTO Accounts (account_name) VALUES (?)", (selection,))
         conn.commit()
+        console.print(
+            f"[limegreen]Account '{selection}' added successfully![/limegreen]"
+        )
+        console.print()
         account_id = cursor.lastrowid
 
     # Prompt for memo (optional)
@@ -374,7 +424,7 @@ def timer_new():
 
     # Prompt for datetime
     try:
-        default = seconds_to_datetime(timestamp())
+        default = seconds_to_datetime(timestamp()).strftime("%y-%m-%d %H:%M") 
         new_datetime_input = session.prompt(
             f"Enter datetime (datetime string) [{default}]: ",
             default=default,
@@ -398,13 +448,13 @@ def timer_new():
     conn.close()
 
 
-@cli.command("tn", short_help="shortcut for timer-new")
+@cli.command("ta", short_help="shortcut for timer-new")
 @click.argument("arguments", nargs=-1)
-def tn(arguments):
+def ta(arguments):
     """
     Shortcut for adding a timer with <account id> and [memo].
 
-    Example: tn 27 programming
+    Example: ta 27 programming
     """
     if len(arguments) < 1:
         # Display the account list
@@ -663,7 +713,7 @@ def _timer_list(include_all=False):
 
     table = Table(title=f"{which} Timers", caption=f"{format_dt(now)}", expand=True, box=box.HEAVY_EDGE)
     table.add_column("row", justify="center", width=3, style="dim")
-    table.add_column("account name", width=15)
+    table.add_column("account", width=15)
     table.add_column("memo", justify="center", width=8)
     table.add_column("status", justify="center", style="green", width=6)
     table.add_column("time", justify="right", width=4),

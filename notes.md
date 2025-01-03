@@ -43,7 +43,8 @@ sqlite3 time_mate.db < backup.sql       # Restore`
 - [x] Don't automatically archive_timers, but have a command to make inactive a selected one. When timer-start is called with a paused timer for which the start_time is less than the current date, create a copy of the timer with the current datetime as the start_time and 0 as the timedelta.
 
 - [x] User errors
-  - An account should actually be regarded as the same as another account. Merge?
+  
+- An account should actually be regarded as the same as another account. Merge?
 
 - [x] setup.py
 
