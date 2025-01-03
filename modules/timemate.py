@@ -379,7 +379,7 @@ def timer_new():
     session = PromptSession()
     try:
         selection = session.prompt(
-            "Enter account position or name: ",
+            "Enter account name: ",
             completer=completer,
             complete_while_typing=True,
         )
@@ -713,11 +713,11 @@ def _timer_list(include_all=False):
 
     table = Table(title=f"{which} Timers", caption=f"{format_dt(now)}", expand=True, box=box.HEAVY_EDGE)
     table.add_column("row", justify="center", width=3, style="dim")
-    table.add_column("account", width=15)
-    table.add_column("memo", justify="center", width=8)
+    table.add_column("account", width=10, overflow="ellipsis", no_wrap=True) 
+    table.add_column("memo", justify="left", min_width=15, overflow="ellipsis", no_wrap=True) 
     table.add_column("status", justify="center", style="green", width=6)
-    table.add_column("time", justify="right", width=4),
-    table.add_column("date", justify="center", width=10)
+    table.add_column("time", justify="right", width=4)
+    table.add_column("date", justify="center", min_width=14, overflow="ellipsis", no_wrap=True) 
 
     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
         timers, start=1
