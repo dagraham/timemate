@@ -1,8 +1,79 @@
+# from datetime import datetime, timezones
+import datetime
+import inspect
+import os
 import re
-from datetime import datetime, timezone
+from typing import Literal
 
+import click
 from dateutil.parser import parse, parserinfo
 from dateutil.tz import gettz
+
+log_dir = None
+
+
+def format_dt(seconds: int) -> str:
+    """
+    Formats a given number of seconds since the epoch into a string representation.
+
+    Args:
+        seconds (int): Positive seconds for aware datetime, negative for naive datetime.
+
+    Returns:
+        str: Formatted datetime string ("%y-%m-%d %H:%M").
+    """
+    if seconds >= 0:
+        # Aware datetime: Convert from UTC to local timezone
+        dt = datetime.datetime.fromtimestamp(seconds, tz=gettz("UTC")).astimezone()
+    else:
+        # Naive datetime: Treat as UTC without timezone adjustment
+        dt = datetime.datetime.utcfromtimestamp(-seconds).replace(tzinfo=None)
+
+    return dt.strftime("%y-%m-%d %H:%M")
+
+
+def timestamp():
+    return round(datetime.datetime.now().timestamp())
+
+
+def format_datetime(
+    seconds: int, fmt: str = "%Y-%m-%d %H:%M %Z", stage: int = 1
+) -> str:
+    return f"{datetime.datetime.fromtimestamp(seconds).astimezone().strftime(fmt)}"
+
+
+# def click_log(msg: str, show_locals: bool = False):
+def click_log(msg: str):
+    # Get the name of the calling function
+    caller_name = inspect.stack()[1].function
+    log_name = format_datetime(timestamp(), "%Y-%m-%d.log")
+
+    msgs = []
+    msgs.append(f"% click_log {format_datetime(timestamp())} [{caller_name}]")
+    ll = []
+    for key, value in locals().items():
+        if key in ["ll", "log_name", "show_locals", "msgs", "msg", "caller_name"]:
+            continue
+        ll.append(f"%     {key}: {value}")
+    if ll:
+        msgs.append("%   Local variables:")
+        msgs.extend(ll)
+    msgs.append(f"%   {msg}\n")
+    msg = "\n".join(msgs)
+
+    # Format the log message
+    if log_dir:
+        with open(os.path.join(log_dir, log_name), "a") as debug_file:
+            # msg = f"\nclick_log {format_datetime(timestamp())} [{caller_name}]\n{msg}"
+            click.echo(
+                msg,
+                file=debug_file,
+            )
+    else:
+        # msg = f"\nclick_log {format_datetime(timestamp())} [{caller_name}]\n{msg}"
+        click.echo(
+            msg,
+        )
 
 
 def datetime_to_seconds(input_str: str) -> int:
@@ -32,8 +103,11 @@ def datetime_to_seconds(input_str: str) -> int:
         timezone_part = timezone_part.strip()
         if timezone_part.lower() == "float":
             # Handle zNaive: Treat as UTC first, then negate
-            dt_utc = dt.replace(tzinfo=timezone.utc)
-            naive_seconds = int(dt_utc.timestamp())
+            dt_utc = dt.replace(tzinfo=gettz("UTC"))
+            # naive_seconds = round(dt.replace(tzinfo=gettz("UTC")).timestamp())
+            naive_seconds = round(dt_utc.timestamp())
+            click_log(f"{naive_seconds = }")
+            # click_log(f"naive_seconds = ")
             return -naive_seconds
         else:
             # Handle other timezones: Aware datetime
@@ -117,7 +191,7 @@ def seconds_to_time(seconds: int) -> str:
     return "".join(result) or "0s"  # Return '0s' for input 0
 
 
-def seconds_to_datetime(seconds: int) -> datetime:
+def seconds_to_datetime(seconds: int) -> datetime.datetime:
     """
     Converts an integer seconds (positive for aware, negative for float)
     into a corresponding datetime.
@@ -132,13 +206,14 @@ def seconds_to_datetime(seconds: int) -> datetime:
     """
     if seconds >= 0:
         # Aware datetime: UTC to local time
-        dt_utc = datetime.fromtimestamp(seconds, tz=timezone.utc)
+        dt_utc = datetime.datetime.fromtimestamp(seconds, tz=gettz("UTC"))
         dt_local = dt_utc.astimezone()  # Convert to local timezone
         return dt_local.strftime("%y-%m-%d %H:%M")
     else:
         # float datetime: Treat as UTC but without attaching a timezone
-        dt_float = datetime.fromtimestamp(abs(seconds), tz=timezone.utc)
-        return dt_float.replace(tzinfo=None).strftime("%y0%m-%d %H:%M")
+        dt_float = datetime.datetime.fromtimestamp(abs(seconds), tz=gettz("UTC"))
+        click_log(f"{dt_float = }")
+        return dt_float.replace(tzinfo=None).strftime("%y-%m-%d %H:%M zFloat")
 
 
 if __name__ == "__main__":
@@ -207,3 +282,6 @@ if __name__ == "__main__":
     # print(datetime_to_seconds("8am Thu"))
     # print(datetime_to_seconds("8am Thu zUS/Pacific"))
     # print(datetime_to_seconds("8am Thu zUTC"))
+else:
+
+    from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home

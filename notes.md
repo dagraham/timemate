@@ -1,5 +1,14 @@
 # Forget me nots
 
+## Times Aware and Naive
+
+- without z: Aware in the local timezone
+  - convert to UTC and store as seconds since epoch
+- with any z other than Float: Aware in the specified timezone
+  - interpret as z time, convert to UTC and store as seconds since epoch
+- with zFloat: Naive
+  - interpret as UTC time, store as negative seconds since epoch
+
 ## setup.py and friends
 
 `python setup.py check`
@@ -11,14 +20,13 @@ sqlite3 time_mate.db < backup.sql       # Restore`
 
 # ToDo
 
-- [ ] Add memo 
-
+- [x] Add memo
 
 # Chat
 
-- [x] Add a method "archive_timers" to set the status to "inactive" for all timers with "datetime" entries < 00:00 hours on the current date. It would be nice if this command could be executed automatically when any command is executed for the first time in a new day. 
+- [x] Add a method "archive_timers" to set the status to "inactive" for all timers with "datetime" entries < 00:00 hours on the current date. It would be nice if this command could be executed automatically when any command is executed for the first time in a new day.
 
-- [x] In list_timers provide an option to include all timers, i.e., timers with any status in ('inactive', 'running', 'paused'), but make the default only to show timers with status in ('running', 'paused'). 
+- [x] In list_timers provide an option to include all timers, i.e., timers with any status in ('inactive', 'running', 'paused'), but make the default only to show timers with status in ('running', 'paused').
 
 - [x] Make the "start_date" optional in "report-account". When not given, do not prompt for end_date and create report for all months
 
@@ -34,30 +42,28 @@ sqlite3 time_mate.db < backup.sql       # Restore`
 
 - [x] Don't automatically archive_timers, but have a command to make inactive a selected one. When timer-start is called with a paused timer for which the start_time is less than the current date, create a copy of the timer with the current datetime as the start_time and 0 as the timedelta.
 
-
-
 - [x] User errors
-    - An account should actually be regarded as the same as another account. Merge?
+  
+- An account should actually be regarded as the same as another account. Merge?
 
 - [x] setup.py
 
+I need
 
-I need 
-
-def str_to_seconds(time_str: str)->int:
+- [x] def str_to_seconds(time_str: str)->int:
     """
-    Takes a string composed of integers joined by characters from 'd', 'h', 'm' and 's' and returns 
-    the corresponding number of seconds as the sum of integer preceeding 's' plus the integer preceeding 'm' times 60 
+    Takes a string composed of integers joined by characters from 'd', 'h', 'm' and 's' and returns
+    the corresponding number of seconds as the sum of integer preceeding 's' plus the integer preceeding 'm' times 60
     plus the integer preceeding h times 60 times 60 plus the integer preceeding d times 24 times 60 times 60. E.g.,
-    '3h15s' = 3 * 60 * 60 + 15 = 10815. 
+    '3h15s' = 3 *60* 60 + 15 = 10815.
     """
 
-I also need a function that takes a string representing a datetime and parses it using parse and parserinfo from dateutil.parser with these
+- [x] I also need a function that takes a string representing a datetime and parses it using parse and parserinfo from dateutil.parser with these
 parserinfo settings: dayfirst = False, yearfirst = True. It should return the corresponding datetime in integer seconds since the epoch.
 I would like the datetime to be interpreted as aware in the local timezone of the computer but, if possible, also to be able to specify  
 an optional timezone, such as 'US/Pacific' to interpret the datetime as aware but in the specified timezone.
 
-def str_to_datetime(datetime_str: str)->int:
+- [x] def str_to_datetime(datetime_str: str)->int:
     """
     Takes a string such as "10pm Thu" and returns in integer number of seconds representing the corresponding
     datetime in seconds since the epoch.
