@@ -391,6 +391,21 @@ def timer_new():
     # Resolve selection to account_id
     account_id = account_completions.get(selection.lower())
     if not account_id:  # If input is a new account name
+        confirm_message = (
+            f"Account '{selection}' does not exist. Do you want to create it? [y/n]: "
+        )
+
+        try:
+            confirm = session.prompt(confirm_message, completer=None, default="n").strip().lower()
+            if confirm != "y":
+                console.print("[yellow]Account creation cancelled by user.[/yellow]")
+                conn.close()
+                return
+        except KeyboardInterrupt:
+            console.print("[red]Operation cancelled by user.[/red]")
+            conn.close()
+            return
+
         cursor.execute("INSERT INTO Accounts (account_name) VALUES (?)", (selection,))
         conn.commit()
         console.print(
@@ -399,10 +414,11 @@ def timer_new():
         console.print()
         account_id = cursor.lastrowid
 
+
     # Prompt for memo (optional)
     try:
         memo = session.prompt(
-            "Enter a memo to describe the time spent (optional): ", default=""
+            "Enter a memo to describe the time spent (optional): ", completer=None, default=""
         )
     except KeyboardInterrupt:
         console.print("[red]Cancelled by user.[/red]")
@@ -425,7 +441,7 @@ def timer_new():
     try:
         default = datetime.datetime.now().strftime("%y-%m-%d %H:%M") 
         new_datetime_input = session.prompt(
-            f"Enter datetime (datetime string) [{default}]: ",
+            f"Enter datetime (datetime string) [{default}]: ", completer=None,
             default=default,
         )
         new_datetime = (
@@ -592,7 +608,7 @@ def timer_update(position):
     # Prompt for memo
     try:
         new_memo = session.prompt(
-            f"Enter memo [{current_memo or ''}]: ", default=current_memo or ""
+            f"Enter memo [{current_memo or ''}]: ", completer=None, default=current_memo or ""
         )
     except KeyboardInterrupt:
         console.print("[red]Operation cancelled by user.[/red]")
@@ -603,7 +619,7 @@ def timer_update(position):
     try:
         default = seconds_to_time(int(current_timedelta))
         new_timedelta = session.prompt(
-            f"Enter elapsed time (time string) [{default}]: ",
+            f"Enter elapsed time (time string) [{default}]: ", completer=None,
             default=default,
         )
         new_timedelta = time_to_seconds(new_timedelta)
@@ -615,7 +631,7 @@ def timer_update(position):
     # Prompt for datetime
     try:
         new_datetime_input = session.prompt(
-            f"Enter datetime (datetime string) [{current_datetime_str}]: ",
+            f"Enter datetime (datetime string) [{current_datetime_str}]: ", completer=None,
             default=current_datetime_str,
         )
         new_datetime = (
@@ -1107,7 +1123,7 @@ def report_account(tree):
     try:
         start_date_input = session.prompt(
             "Enter starting month (YY-MM) (press Enter to include all months): ",
-            default="",
+            default="", completer=None,
         )
         start_date = (
             datetime.datetime.strptime(start_date_input, "%y-%m")
@@ -1143,7 +1159,7 @@ def report_account(tree):
         # Prompt for optional ending month if start_date is given
         try:
             end_date_input = session.prompt(
-                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
+                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ", completer=None,
                 default=start_date.strftime("%y-%m"),
             )
             end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
