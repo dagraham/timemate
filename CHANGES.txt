@@ -1,41 +1,45 @@
-Recent tagged changes as of 2025-01-03 21:52:25.082522:
-- 0 seconds ago (HEAD -> working, tag: 0.0.22) Daniel Graham
+Recent tagged changes as of 2025-01-04 09:16:42.305231:
+- 0 seconds ago (HEAD -> working, tag: 0.0.23) Daniel Graham
+    62cbfe8 2025-01-04 09:16:42 -0500
+    Tagged version 0.0.23.
+
+- 11 hours ago (tag: 0.0.22) Daniel Graham
     f4a44d3 2025-01-03 21:52:25 -0500
     Tagged version 0.0.22.
 
-- 15 hours ago (tag: 0.0.21) Daniel Graham
+- 26 hours ago (tag: 0.0.21) Daniel Graham
     f77ff68 2025-01-03 06:52:19 -0500
     Tagged version 0.0.21.
 
-- 9 days ago (tag: 0.0.20) Daniel Graham
+- 10 days ago (tag: 0.0.20) Daniel Graham
     a93e205 2024-12-25 13:57:20 -0500
     Tagged version 0.0.20.
 
-- 9 days ago (tag: 0.0.19) Daniel Graham
+- 10 days ago (tag: 0.0.19) Daniel Graham
     65cd59a 2024-12-25 13:37:41 -0500
     Tagged version 0.0.19.
 
-- 9 days ago (tag: 0.0.18) Daniel Graham
+- 10 days ago (tag: 0.0.18) Daniel Graham
     d202d08 2024-12-25 13:12:30 -0500
     Tagged version 0.0.18.
 
-- 9 days ago (tag: 0.0.17) Daniel Graham
+- 10 days ago (tag: 0.0.17) Daniel Graham
     f8677ea 2024-12-25 13:05:29 -0500
     Tagged version 0.0.17.
 
-- 9 days ago (tag: 0.0.16) Daniel Graham
+- 10 days ago (tag: 0.0.16) Daniel Graham
     040ad27 2024-12-25 12:56:14 -0500
     Tagged version 0.0.16.
 
-- 10 days ago (tag: 0.0.15) Daniel Graham
+- 11 days ago (tag: 0.0.15) Daniel Graham
     051142c 2024-12-24 13:24:38 -0500
     Tagged version 0.0.15.
 
-- 10 days ago (tag: 0.0.14) Daniel Graham
+- 11 days ago (tag: 0.0.14) Daniel Graham
     8776f71 2024-12-24 13:15:27 -0500
     Tagged version 0.0.14.
 
-- 13 days ago (tag: 0.0.13) Daniel Graham
+- 2 weeks ago (tag: 0.0.13) Daniel Graham
     da57786 2024-12-21 12:10:43 -0500
     Tagged version 0.0.13.
 
@@ -67,14 +71,10 @@ Recent tagged changes as of 2025-01-03 21:52:25.082522:
     a68ba30 2024-12-18 11:13:47 -0500
     Tagged version 0.0.6.
 
-- 2 weeks ago (tag: 0.0.5) Daniel Graham
+- 3 weeks ago (tag: 0.0.5) Daniel Graham
     b533dc9 2024-12-17 20:39:45 -0500
     Tagged version 0.0.5.
 
-- 2 weeks ago (tag: 0.0.4) Daniel Graham
+- 3 weeks ago (tag: 0.0.4) Daniel Graham
     4a0e95e 2024-12-17 15:21:38 -0500
     Tagged version 0.0.4.
-
-- 2 weeks ago (tag: 0.0.3) Daniel Graham
-    ee202ca 2024-12-17 14:52:52 -0500
-    Tagged version 0.0.3.
