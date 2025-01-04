@@ -421,10 +421,9 @@ def timer_new():
         console.print("[red]Invalid input or operation cancelled.[/red]")
         conn.close()
         return
-
     # Prompt for datetime
     try:
-        default = seconds_to_datetime(timestamp()).strftime("%y-%m-%d %H:%M") 
+        default = datetime.datetime.now().strftime("%y-%m-%d %H:%M") 
         new_datetime_input = session.prompt(
             f"Enter datetime (datetime string) [{default}]: ",
             default=default,
@@ -438,7 +437,6 @@ def timer_new():
         console.print("[red]Invalid datetime format or operation cancelled.[/red]")
         conn.close()
         return
-
     cursor.execute(
         "INSERT INTO Times (account_id, memo, status, timedelta, datetime) VALUES (?, ?, 'paused', ?, ?)",
         (account_id, memo, new_timedelta, new_datetime),
