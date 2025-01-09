@@ -97,6 +97,7 @@ def cli() -> Shell | None:
 
     Record and report times spent in various activities
     """
+
     _timer_list()
 
 
@@ -533,7 +534,7 @@ def ta(arguments):
 @click.argument("position", type=int)
 def timer_update(position):
     """
-    Update fields (account, memo, timedelta) for a specific timer interactively.
+    Update fields (account, memo, timedelta, datetime) for a specific timer interactively.
     Existing values are shown as defaults.
     """
     time_id = pos_to_id.get(position)
@@ -701,6 +702,7 @@ def timer_list(all):
 
 def _timer_list(include_all=False):
     global pos_to_id
+    console.clear() 
     conn = setup_database()
     cursor = conn.cursor()
 
@@ -1642,7 +1644,7 @@ def main():
     MINUTES = get_minutes_setting(conn)  # Load MINUTES from the database
     click_log(f"got {MINUTES = }")
     console.clear()
-    # _info()
+    _info()
     cli()
 
 
