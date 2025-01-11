@@ -337,20 +337,31 @@ def account_new():
     account_id = account_completions.get(selection.lower())
     if account_id:  # If input is a new account name
         console.print(f"[red]Account '{selection}' already exists.[/red]")
+    elif not selection.strip():  # If input is empty
+        console.print("[red]Account name cannot be empty[/red]")
     else:
-        cursor.execute("INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)", (selection, timestamp()))
-        conn.commit()
-        console.print(
-            f"[limegreen]Account '{selection}' added successfully![/limegreen]"
+        # Add confirmation step
+        confirm = session.prompt(
+            f"Are you sure you want to add account '{selection}'? [y/N]: ",
+            default="n",
         )
-        account_id = cursor.lastrowid
+        if confirm.strip().lower() in {"y", "yes"}:
+            # Insert into database
+            cursor.execute("INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)", (selection, timestamp()))
+            conn.commit()
+            console.print(
+                f"[limegreen]Account '{selection}' added successfully![/limegreen]"
+            )
+            account_id = cursor.lastrowid
+        else:
+            console.print("[yellow]Operation cancelled.[/yellow]")
     conn.close()
+
 
 @cli.command("tn", short_help="Shortcut for timer-new")
 def timer_new_shortcut():
     """Shortcut for "timer-new". Add a new timer."""
     timer_new()
-
 
 
 @cli.command("timer-new", short_help="add a new timer")
