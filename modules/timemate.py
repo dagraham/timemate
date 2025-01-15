@@ -290,7 +290,7 @@ def account_list():
 def _accounts_list():
     conn = setup_database()
     cursor = conn.cursor()
-    cursor.execute("SELECT account_id, account_name FROM Accounts")
+    cursor.execute("SELECT account_id, account_name FROM Accounts ORDER BY account_name")
     accounts = cursor.fetchall()
     table = Table(title="Accounts", expand=True)
     table.add_column("row", justify="center", width=2, style="dim")
@@ -731,7 +731,7 @@ def _timer_list(include_all=False):
         FROM Times T
         JOIN Accounts A ON T.account_id = A.account_id
         WHERE {status_filter}
-        ORDER BY T.time_id
+        ORDER BY A.account_name, T.datetime 
         """
     )
     now = round(datetime.datetime.now().timestamp())
