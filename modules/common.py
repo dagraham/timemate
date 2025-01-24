@@ -8,8 +8,60 @@ from typing import Literal
 import click
 from dateutil.parser import parse, parserinfo
 from dateutil.tz import gettz
+import textwrap
+import shutil
+# from datetime import datetime, date, timedelta
 
 log_dir = None
+
+
+def log_msg(msg: str, file_path: str = "log_msg.md"):
+    """
+    Log a message and save it directly to a specified file.
+
+    Args:
+        msg (str): The message to log.
+        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+    """
+    caller_name = inspect.stack()[1].function
+    lines = [
+        f"- {datetime.datetime.now().strftime('%y-%m-%d %H:%M')} "
+        + rf"({caller_name}):  ",
+    ]
+    lines.extend(
+        [
+            f"\n{x}"
+            for x in textwrap.wrap(
+                msg.strip(),
+                width=shutil.get_terminal_size()[0] - 6,
+                initial_indent="   ",
+                subsequent_indent="   ",
+            )
+        ]
+    )
+    lines.append("\n\n")
+
+    # Save the message to the file
+    with open(file_path, "a") as f:
+        f.writelines(lines)
+
+
+def display_messages(file_path: str = "log_msg.md"):
+    """
+    Display all logged messages from the specified file.
+
+    Args:
+        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+    """
+    try:
+        # Read messages from the file
+        with open(file_path, "r") as f:
+            markdown_content = f.read()
+        markdown = Markdown(markdown_content)
+        console = Console()
+        console.print(markdown)
+    except FileNotFoundError:
+        print(f"Error: Log file '{file_path}' not found.")
 
 
 def format_dt(seconds: int) -> str:
@@ -284,5 +336,4 @@ if __name__ == "__main__":
     # print(datetime_to_seconds("8am Thu zUS/Pacific"))
     # print(datetime_to_seconds("8am Thu zUTC"))
 else:
-
     from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
