@@ -1,4 +1,5 @@
 import datetime
+
 # import inspect
 import json
 import math
@@ -19,13 +20,12 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
-from . import (CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id,
-               timemate_home)
+from . import CONFIG_FILE, backup_dir, db_path, log_dir, pos_to_id, timemate_home
 from .__version__ import version
 from .common import click_log  # format_hours_and_tenths,
 from .common import datetime_to_seconds  # format_hours_minutes,
-from .common import (seconds_to_datetime, seconds_to_time, time_to_seconds,
-                     timestamp)
+from .common import seconds_to_datetime, seconds_to_time, time_to_seconds, timestamp
+from .common import log_msg, display_messages
 
 AllowedMinutes = Literal[1, 6, 12, 30, 60]
 MINUTES = 1
@@ -128,7 +128,6 @@ def timer_archive():
         "[green]Timers with start times before today have been archived![/green]"
     )
     conn.close()
-
 
     # try:
     #     cursor.execute(
@@ -290,7 +289,9 @@ def account_list():
 def _accounts_list():
     conn = setup_database()
     cursor = conn.cursor()
-    cursor.execute("SELECT account_id, account_name FROM Accounts ORDER BY account_name")
+    cursor.execute(
+        "SELECT account_id, account_name FROM Accounts ORDER BY account_name"
+    )
     accounts = cursor.fetchall()
     table = Table(title="Accounts", expand=True)
     table.add_column("row", justify="center", width=2, style="dim")
@@ -299,6 +300,7 @@ def _accounts_list():
         table.add_row(str(idx), account_name)
     console.print(table)
     conn.close()
+
 
 @cli.command("account-new", short_help="add a new account")
 def account_new():
@@ -343,11 +345,15 @@ def account_new():
         # Add confirmation step
         confirm = session.prompt(
             f"Are you sure you want to add account '{selection}'? [y/N]: ",
-            default="n",
+            completer=None,
+            # default="",
         )
         if confirm.strip().lower() in {"y", "yes"}:
             # Insert into database
-            cursor.execute("INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)", (selection, timestamp()))
+            cursor.execute(
+                "INSERT INTO Accounts (account_name, datetime) VALUES (?, ?)",
+                (selection, timestamp()),
+            )
             conn.commit()
             console.print(
                 f"[limegreen]Account '{selection}' added successfully![/limegreen]"
@@ -404,11 +410,19 @@ def timer_new():
     account_id = account_completions.get(selection.lower())
     if not account_id:  # If input is a new account name
         confirm_message = (
-            f"Account '{selection}' does not exist. Do you want to create it? [y/n]: "
+            f"Account '{selection}' does not exist. Do you want to create it? [y/N]: "
         )
 
         try:
-            confirm = session.prompt(confirm_message, completer=None, default="n").strip().lower()
+            confirm = (
+                session.prompt(
+                    confirm_message,
+                    completer=None,
+                    # default="n"
+                )
+                .strip()
+                .lower()
+            )
             if confirm != "y":
                 console.print("[yellow]Account creation cancelled by user.[/yellow]")
                 conn.close()
@@ -426,11 +440,12 @@ def timer_new():
         console.print()
         account_id = cursor.lastrowid
 
-
     # Prompt for memo (optional)
     try:
         memo = session.prompt(
-            "Enter a memo to describe the time spent (optional): ", completer=None, default=""
+            "Enter a memo to describe the time spent (optional): ",
+            completer=None,
+            default="",
         )
     except KeyboardInterrupt:
         console.print("[red]Cancelled by user.[/red]")
@@ -443,6 +458,7 @@ def timer_new():
         new_timedelta = session.prompt(
             f"Enter elapsed time (time string) [{default}]: ",
             default=default,
+            completer=None,
         )
         new_timedelta = time_to_seconds(new_timedelta)
     except (ValueError, KeyboardInterrupt):
@@ -451,9 +467,10 @@ def timer_new():
         return
     # Prompt for datetime
     try:
-        default = datetime.datetime.now().strftime("%y-%m-%d %H:%M") 
+        default = datetime.datetime.now().strftime("%y-%m-%d %H:%M")
         new_datetime_input = session.prompt(
-            f"Enter datetime (datetime string) [{default}]: ", completer=None,
+            f"Enter datetime (datetime string) [{default}]: ",
+            completer=None,
             default=default,
         )
         new_datetime = (
@@ -620,7 +637,9 @@ def timer_update(position):
     # Prompt for memo
     try:
         new_memo = session.prompt(
-            f"Enter memo [{current_memo or ''}]: ", completer=None, default=current_memo or ""
+            f"Enter memo [{current_memo or ''}]: ",
+            completer=None,
+            default=current_memo or "",
         )
     except KeyboardInterrupt:
         console.print("[red]Operation cancelled by user.[/red]")
@@ -631,7 +650,8 @@ def timer_update(position):
     try:
         default = seconds_to_time(int(current_timedelta))
         new_timedelta = session.prompt(
-            f"Enter elapsed time (time string) [{default}]: ", completer=None,
+            f"Enter elapsed time (time string) [{default}]: ",
+            completer=None,
             default=default,
         )
         new_timedelta = time_to_seconds(new_timedelta)
@@ -643,7 +663,8 @@ def timer_update(position):
     # Prompt for datetime
     try:
         new_datetime_input = session.prompt(
-            f"Enter datetime (datetime string) [{current_datetime_str}]: ", completer=None,
+            f"Enter datetime (datetime string) [{current_datetime_str}]: ",
+            completer=None,
             default=current_datetime_str,
         )
         new_datetime = (
@@ -713,7 +734,7 @@ def timer_list(all):
 
 def _timer_list(include_all=False):
     global pos_to_id
-    console.clear() 
+    console.clear()
     conn = setup_database()
     cursor = conn.cursor()
 
@@ -738,13 +759,22 @@ def _timer_list(include_all=False):
     which = "All" if include_all else "Active"
     timers = cursor.fetchall()
 
-    table = Table(title=f"{which} Timers", caption=f"{format_dt(now)}", expand=True, box=box.HEAVY_EDGE)
+    table = Table(
+        title=f"{which} Timers",
+        caption=f"{format_dt(now)}",
+        expand=True,
+        box=box.HEAVY_EDGE,
+    )
     table.add_column("row", justify="center", width=3, style="dim")
-    table.add_column("account", width=10, overflow="ellipsis", no_wrap=True) 
-    table.add_column("memo", justify="left", min_width=15, overflow="ellipsis", no_wrap=True) 
+    table.add_column("account", width=10, overflow="ellipsis", no_wrap=True)
+    table.add_column(
+        "memo", justify="left", min_width=15, overflow="ellipsis", no_wrap=True
+    )
     table.add_column("status", justify="center", style="green", width=6)
     table.add_column("time", justify="right", width=4)
-    table.add_column("date", justify="center", min_width=14, overflow="ellipsis", no_wrap=True) 
+    table.add_column(
+        "date", justify="center", min_width=14, overflow="ellipsis", no_wrap=True
+    )
 
     for idx, (time_id, account_name, memo, status, timedelta, start_time) in enumerate(
         timers, start=1
@@ -754,7 +784,9 @@ def _timer_list(include_all=False):
         status_color = (
             "yellow"
             if status == "running"
-            else "green" if status == "paused" else "blue"
+            else "green"
+            if status == "paused"
+            else "blue"
         )
         table.add_row(
             str(idx),
@@ -988,6 +1020,7 @@ def report_month():
     Generate a monthly report for the month containing a specified date.
     Prompts for the month in YY-MM format.
     """
+    log_msg("report_month")
     conn = setup_database()
     cursor = conn.cursor()
 
@@ -1062,6 +1095,7 @@ def report_month():
                 "%d %H:%M"
             )
             if rounded_timedelta:
+                log_msg(f"{rounded_timedelta = }")
                 memo_str = f" ({memo})" if memo else ""
                 console.print(
                     f"  [yellow]{format_hours_and_tenths(rounded_timedelta)}[/yellow] [green]{datetime_str}[/green]{memo_str}"
@@ -1136,7 +1170,8 @@ def report_account(tree):
     try:
         start_date_input = session.prompt(
             "Enter starting month (YY-MM) (press Enter to include all months): ",
-            default="", completer=None,
+            default="",
+            completer=None,
         )
         start_date = (
             datetime.datetime.strptime(start_date_input, "%y-%m")
@@ -1172,7 +1207,8 @@ def report_account(tree):
         # Prompt for optional ending month if start_date is given
         try:
             end_date_input = session.prompt(
-                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ", completer=None,
+                "Enter ending month (YY-MM) (press Enter to use the same as starting month): ",
+                completer=None,
                 default=start_date.strftime("%y-%m"),
             )
             end_date = datetime.datetime.strptime(end_date_input, "%y-%m")
@@ -1217,6 +1253,9 @@ def report_account(tree):
                 datetime_str = datetime.datetime.fromtimestamp(datetime_val).strftime(
                     "%d %H:%M"
                 )
+                if rounded_timedelta == 0:
+                    continue
+                log_msg(f"{rounded_timedelta = }")
                 total += rounded_timedelta
                 paths.append(
                     (account_name, memo or "", rounded_timedelta, datetime_val)
@@ -1304,6 +1343,8 @@ def build_tree(name, paths):
         current_node = root
 
         # Iterate through the segments, creating nodes if necessary
+        if not value:
+            continue
         for i, part in enumerate(parts):
             # Construct the full path for the current node
             full_path = "/".join(parts[: i + 1])
