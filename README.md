@@ -6,6 +6,23 @@
             ██║   ██║██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║██║  ██║   ██║   ███████╗
             ╚═╝   ╚═╝╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝
 ```
+# Project Status (March 12, 2026)
+
+_TimeMate_ has been replaced by [_tklr_](https://github.com/dagraham/tklr-dgraham). _TimeMate_ itself will no longer receive updates or fixes. 
+
+_tklr_ links:
+
+- Documentation: https://dagraham.github.io/tklr-dgraham/
+- PyPI: https://pypi.org/project/tklr-dgraham/
+- Source: https://github.com/dagraham/tklr-dgraham
+
+_tklr_ links regarding _TimeMate_ in particular:
+
+- [jots](https://dagraham.github.io/tklr-dgraham/#1210-a-jot-taking-a-walk)
+- [jots and jot uses](https://dagraham.github.io/tklr-dgraham/#16-jots-and-jot-uses-views-where-did-the-time-go)
+
+# Legacy _timemate_ documentation
+
 This is the *TimeMate* user manual.  It is best viewed at [GitHub.io](https://dagraham.github.io/timemate/). 
 
 The first step in conserving a scare resource is tracking its use. *TimeMate*'s purpose is to do just that for your precious time. The general idea is to maintain a list of accounts on which important amounts of time might be spent together with a means of easily starting and stopping timers to charge times spent against these accounts.  
